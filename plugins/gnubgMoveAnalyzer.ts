@@ -1,6 +1,6 @@
-import { MoveAnalyzer, MoveAnalyzerContext } from '../src/moveAnalyzers'
 import { BackgammonMoveBase } from '../../nodots-backgammon-types/src/move'
 import { getBestMoveFromGnubg } from '../src/gnubgApi'
+import { MoveAnalyzer, MoveAnalyzerContext } from '../src/moveAnalyzers'
 
 export class GnubgMoveAnalyzer implements MoveAnalyzer {
   async selectMove(

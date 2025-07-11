@@ -1,0 +1,7 @@
+# Deprecated Cursor Rules File for nodots-backgammon-ai
+
+This `.cursorrules` file has been superseded by the consolidated rule system located at the workspace root under `.cursor/`.
+
+All nodots-backgammon sub-packages, including **ai**, now automatically inherit shared rules (core, development, coding) from that consolidated configuration.
+
+If you need AI-specific rules in the future, add them via `customRules` in `.cursor/config.json` and regenerate.

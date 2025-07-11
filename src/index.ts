@@ -158,6 +158,10 @@ export * from './moveAnalyzers'
 export * from './pluginLoader'
 export { gnubg, GnubgIntegration }
 
+// Export AI plugins
+export { GnubgMoveAnalyzer } from '../plugins/gnubgMoveAnalyzer'
+export { NodotsAIMoveAnalyzer } from '../plugins/nodotsAIMoveAnalyzer'
+
 // Example usage (assuming you have a Position ID from nodots-backgammon-core):
 // async function main() {
 //   // Replace with a real Position ID from your game
