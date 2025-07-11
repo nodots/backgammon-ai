@@ -1,33 +1,52 @@
 # Nodots Backgammon AI
 
 <!-- COVERAGE-START -->
+
 ![Statements](https://img.shields.io/badge/Statements-60%25-orange?style=flat-square)
 ![Branches](https://img.shields.io/badge/Branches-32%25-red?style=flat-square)
 ![Functions](https://img.shields.io/badge/Functions-50%25-red?style=flat-square)
 ![Lines](https://img.shields.io/badge/Lines-60%25-orange?style=flat-square)
+
 <!-- COVERAGE-END -->
 
 A TypeScript library that provides AI capabilities for backgammon games using GNU Backgammon (gnubg) as the backend engine. This package is part of the Nodots Backgammon ecosystem and **includes the complete gnubg source code** for self-contained deployment.
 
-## 🎯 What's New in v3.1.0
+## 🎯 What's New in v3.5.0
 
-- ✅ **Successfully integrated GNU Backgammon v1.08.003** with full source code
-- ✅ **Minimal CLI-only configuration** - no GTK, audio, or GUI dependencies required
-- ✅ **Verified position analysis** - tested with multiple position IDs
-- ✅ **Enhanced TypeScript integration** with automatic gnubg detection
-- ✅ **Cross-platform compatibility** - built and tested on macOS (Apple Silicon)
-- ✅ **Professional-grade AI analysis** - world-class backgammon engine (2000+ FIBS rating)
+- 🔌 **Revolutionary Plugin System** - Open, extensible architecture for AI development
+- 🧠 **Nodots AI Engine** - New intelligent analyzer with strategic heuristics
+- 🌐 **Five Built-in Analyzers** - From random to world-class GNU Backgammon AI
+- 🚀 **Dynamic Plugin Loading** - Hot-swappable AI engines with automatic discovery
+- 💡 **Context-Aware Analysis** - Analyzers receive board state and position data
+- 🔓 **Open Development Platform** - Community-driven, plugin-friendly architecture
+- 📊 **Enhanced API Surface** - New exports for plugin development and integration
+- 🎯 **Template-Based Development** - Easy plugin creation with standardized interfaces
 
 ## Features
 
-- **🧠 World-Class AI**: GNU Backgammon v1.08.003 with 2000+ FIBS rating equivalent
-- **📦 Self-Contained**: Complete gnubg source code included - no external dependencies
-- **🚀 Production Ready**: Successfully built and tested with real position analysis
-- **🎯 Position Analysis**: Get best moves for any GNU backgammon position ID
-- **💻 TypeScript Support**: Full type definitions and intelligent integration
-- **🔧 Minimal Dependencies**: CLI-only build without GUI components
-- **📊 Comprehensive Analysis**: Equity calculations, move rankings, and probability analysis
-- **🌐 Cross-Platform**: Supports macOS, Linux with automated build scripts
+### 🔌 **Plugin System & Openness**
+
+- **Open Architecture**: Plugin system enables community-contributed analyzers
+- **Five Built-in Analyzers**: Random, strategic, defensive, template, and world-class AI
+- **Hot-Swappable Intelligence**: Switch between AI engines seamlessly
+- **Context-Aware Analysis**: Analyzers receive board state and position information
+- **Dynamic Loading**: Automatic discovery and loading of custom plugins
+- **Template-Based Development**: Standardized interfaces for easy plugin creation
+
+### 🧠 **AI Intelligence Options**
+
+- **Nodots AI Engine**: Strategic heuristics with safety, offense, and racing priorities
+- **GNU Backgammon Integration**: World-class AI with 2000+ FIBS rating equivalent
+- **Multiple Strategies**: From random testing to tournament-grade analysis
+- **Extensible Framework**: Build custom analyzers for specialized strategies
+
+### 🚀 **Production Ready**
+
+- **Self-Contained**: Complete gnubg source code included - no external dependencies
+- **TypeScript First**: Full type definitions and intelligent integration
+- **Cross-Platform**: Supports macOS, Linux with automated build scripts
+- **Comprehensive Analysis**: Equity calculations, move rankings, and probability analysis
+- **Minimal Dependencies**: CLI-only build without GUI components
 
 ## Installation
 
@@ -126,29 +145,166 @@ For more build options, see:
 cd gnubg && ./configure --help
 ```
 
-## Usage
+## Plugin System & AI Analyzers
 
-### Position Analysis (Recommended)
+### 🔌 **Revolutionary Plugin Architecture**
+
+Version 3.5.0 introduces a **groundbreaking plugin system** that transforms nodots-backgammon-ai into an **open, extensible platform** for backgammon AI development. The plugin system enables developers to create, share, and integrate diverse AI strategies seamlessly.
+
+### **Built-in Analyzers**
+
+| Analyzer                        | Strategy                           | Use Case                                        |
+| ------------------------------- | ---------------------------------- | ----------------------------------------------- |
+| **RandomMoveAnalyzer**          | Random selection                   | Testing, baseline comparison                    |
+| **FurthestFromOffMoveAnalyzer** | Maximize distance from bearing off | Defensive/blocking strategies                   |
+| **ExamplePluginAnalyzer**       | Template for developers            | Plugin development starting point               |
+| **GnubgMoveAnalyzer**           | GNU Backgammon integration         | World-class AI analysis                         |
+| **NodotsAIMoveAnalyzer**        | Strategic heuristics engine        | Intelligent gameplay with safety/offense/racing |
+
+### **Using Different Analyzers**
 
 ```typescript
-import { GnubgIntegration } from '@nodots-llc/backgammon-ai'
+import {
+  NodotsAIMoveAnalyzer,
+  GnubgMoveAnalyzer,
+  RandomMoveAnalyzer,
+  selectMoveFromList,
+} from '@nodots-llc/backgammon-ai'
 
+// Choose analyzer based on game context
+const analyzer =
+  difficulty === 'expert' ? new GnubgMoveAnalyzer() : new NodotsAIMoveAnalyzer()
+
+const bestMove = await selectMoveFromList(moves, analyzer)
+```
+
+### **Creating Custom Analyzers**
+
+```typescript
+import { MoveAnalyzer, MoveAnalyzerContext } from '@nodots-llc/backgammon-ai'
+import { BackgammonMoveBase } from '@nodots-llc/backgammon-types'
+
+export class MyCustomAnalyzer implements MoveAnalyzer {
+  async selectMove(
+    moves: BackgammonMoveBase[],
+    context?: MoveAnalyzerContext
+  ): Promise<BackgammonMoveBase | null> {
+    // Your custom AI logic here
+    // Access board state: context?.board
+    // Access position ID: context?.positionId
+
+    // Example: Prefer moves with higher die values
+    return moves.reduce((best, current) =>
+      current.dieValue > best.dieValue ? current : best
+    )
+  }
+}
+
+export default MyCustomAnalyzer
+```
+
+### **Dynamic Plugin Loading**
+
+```typescript
+import { loadAnalyzersFromPluginsDir } from '@nodots-llc/backgammon-ai'
+
+// Load all analyzers from a directory
+const analyzers = loadAnalyzersFromPluginsDir('./my-plugins')
+
+// Use any loaded analyzer
+const move = await analyzers['myCustomAnalyzer'].selectMove(moves, {
+  positionId: 'gJ/4AFjgc3AEO',
+  board: currentBoard,
+})
+```
+
+### **Nodots AI Engine - Strategic Heuristics**
+
+The new **NodotsAIMoveAnalyzer** implements intelligent move selection with a three-tier strategy system:
+
+```typescript
+import { NodotsAIMoveAnalyzer } from '@nodots-llc/backgammon-ai'
+
+const nodotsAI = new NodotsAIMoveAnalyzer()
+
+// The AI prioritizes:
+// 1. Safety: Creating points, escaping blots
+// 2. Offense: Attacking opponent blots, blocking
+// 3. Racing: Advancing checkers efficiently
+
+const bestMove = await nodotsAI.selectMove(moves, context)
+```
+
+### **Plugin Development Template**
+
+1. **Create your analyzer class:**
+
+```typescript
+// plugins/myAnalyzer.ts
+import { MoveAnalyzer, MoveAnalyzerContext } from '@nodots-llc/backgammon-ai'
+
+export class MyAnalyzer implements MoveAnalyzer {
+  async selectMove(moves, context) {
+    // Your logic here
+    return moves[0] || null
+  }
+}
+
+export default MyAnalyzer
+```
+
+2. **Load and use it:**
+
+```typescript
+import { loadAnalyzersFromPluginsDir } from '@nodots-llc/backgammon-ai'
+const analyzers = loadAnalyzersFromPluginsDir('./plugins')
+const move = await analyzers['myAnalyzer'].selectMove(moves, context)
+```
+
+### **Community & Openness**
+
+The plugin system embodies our commitment to **open development**:
+
+- 🔓 **Open Architecture**: No vendor lock-in, switch AI engines seamlessly
+- 🌐 **Community-Driven**: Easy contribution of new analyzers
+- 🧪 **Experimentation-Friendly**: Test strategies without code changes
+- 📚 **Template-Based**: Standardized interfaces for easy development
+- 🚀 **Innovation Platform**: Framework for AI research and development
+
+---
+
+## Usage
+
+### Position Analysis with Plugin System
+
+```typescript
+import {
+  GnubgIntegration,
+  NodotsAIMoveAnalyzer,
+  selectMoveFromList,
+} from '@nodots-llc/backgammon-ai'
+
+// Method 1: Direct GNU Backgammon integration
 const gnubg = new GnubgIntegration()
 
-// Check if gnubg is available
-const available = await gnubg.isAvailable()
-if (available) {
-  // Analyze a position and get the best move
+if (await gnubg.isAvailable()) {
   const positionId = 'gJ/4AFjgc3AEO' // Tested position ID
   const bestMove = await gnubg.getBestMove(positionId)
   console.log('Best move:', bestMove) // "24/20 16/13"
-
-  // Get version information
-  const version = await gnubg.getVersion()
-  console.log('gnubg version:', version)
 } else {
   console.log(gnubg.getBuildInstructions())
 }
+
+// Method 2: Using the plugin system (recommended)
+const nodotsAI = new NodotsAIMoveAnalyzer()
+const intelligentMove = await selectMoveFromList(moves, nodotsAI)
+console.log('Intelligent move:', intelligentMove)
+
+// Method 3: Context-aware analysis
+const contextualMove = await nodotsAI.selectMove(moves, {
+  positionId: 'gJ/4AFjgc3AEO',
+  board: currentBoardState,
+})
 ```
 
 ### Legacy Integration Methods
