@@ -1,6 +1,6 @@
 {
   "name": "@nodots-llc/backgammon-ai",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "AI and integration for nodots-backgammon using gnubg as a backend engine with embedded source code.",
   "type": "module",
   "main": "dist/index.js",
