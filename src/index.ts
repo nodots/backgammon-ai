@@ -162,6 +162,13 @@ export { gnubg, GnubgIntegration }
 export { GnubgMoveAnalyzer } from '../plugins/gnubgMoveAnalyzer'
 export { NodotsAIMoveAnalyzer } from '../plugins/nodotsAIMoveAnalyzer'
 
+// Export Nodots2 AI components
+export { Nodots2AI } from './ai/Nodots2AI'
+export { Nodots2Trainer } from './ai/training'
+export { NeuralNetwork } from './ai/NeuralNetwork'
+export { MonteCarloTreeSearch } from './ai/MonteCarloTreeSearch'
+export { FeatureExtractor } from './ai/FeatureExtractor'
+
 // Example usage (assuming you have a Position ID from nodots-backgammon-core):
 // async function main() {
 //   // Replace with a real Position ID from your game
