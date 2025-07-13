@@ -1,6 +1,6 @@
-// Entry point for nodots-backgammon-ai
+// Entry point for backgammon-ai
 import { exec } from 'child_process'
-import { BackgammonMoveBase } from '../../nodots-backgammon-types/src/move'
+import { BackgammonMoveBase } from '../../types/src/move'
 import { gnubg, GnubgIntegration } from './gnubg'
 import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers'
 
@@ -162,7 +162,7 @@ export { gnubg, GnubgIntegration }
 export { GnubgMoveAnalyzer } from '../plugins/gnubgMoveAnalyzer'
 export { NodotsAIMoveAnalyzer } from '../plugins/nodotsAIMoveAnalyzer'
 
-// Example usage (assuming you have a Position ID from nodots-backgammon-core):
+// Example usage (assuming you have a Position ID from backgammon-core):
 // async function main() {
 //   // Replace with a real Position ID from your game
 //   const examplePositionId = "4HPwATDgc/ABMA"; // Standard starting position

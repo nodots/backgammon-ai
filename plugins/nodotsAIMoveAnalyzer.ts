@@ -1,4 +1,4 @@
-import { BackgammonMoveBase } from '../../nodots-backgammon-types/src/move'
+import { BackgammonMoveBase } from '../../types/src/move'
 import { MoveAnalyzer, MoveAnalyzerContext } from '../src/moveAnalyzers'
 
 /**

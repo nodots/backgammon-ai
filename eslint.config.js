@@ -37,27 +37,21 @@ export default [
         {
           patterns: [
             {
-              group: [
-                '**/nodots-backgammon-core/**',
-                '**/nodots-backgammon-core',
-              ],
+              group: ['*./core/**', '**/core'],
               message:
-                'Do not use relative imports for nodots-backgammon-core. This creates circular dependencies.',
+                'Do not use relative imports for core. This creates circular dependencies.',
             },
             {
-              group: [
-                '**/nodots-backgammon-api/**',
-                '**/nodots-backgammon-api',
-              ],
+              group: ['**/api/**', '**/api'],
               message:
-                'Do not use relative imports for nodots-backgammon-api. This creates circular dependencies.',
+                'Do not use relative imports for api. This creates circular dependencies.',
             },
           ],
           paths: [
             {
-              name: '../../nodots-backgammon-core/src/utils',
+              name: '../../core/src/utils',
               message:
-                'Do not import from ../../nodots-backgammon-core/src/utils. This creates circular dependencies.',
+                'Do not import from ../../core/src/utils. This creates circular dependencies.',
             },
           ],
         },
@@ -111,27 +105,21 @@ export default [
         {
           patterns: [
             {
-              group: [
-                '**/nodots-backgammon-core/**',
-                '**/nodots-backgammon-core',
-              ],
+              group: ['*./core/**', '**/core'],
               message:
-                'Do not use relative imports for nodots-backgammon-core. This creates circular dependencies.',
+                'Do not use relative imports for core. This creates circular dependencies.',
             },
             {
-              group: [
-                '**/nodots-backgammon-api/**',
-                '**/nodots-backgammon-api',
-              ],
+              group: ['**/api/**', '**/api'],
               message:
-                'Do not use relative imports for nodots-backgammon-api. This creates circular dependencies.',
+                'Do not use relative imports for api. This creates circular dependencies.',
             },
           ],
           paths: [
             {
-              name: '../../nodots-backgammon-core/src/utils',
+              name: '../../core/src/utils',
               message:
-                'Do not import from ../../nodots-backgammon-core/src/utils. This creates circular dependencies.',
+                'Do not import from ../../core/src/utils. This creates circular dependencies.',
             },
           ],
         },

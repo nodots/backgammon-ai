@@ -1,4 +1,4 @@
-import { BackgammonMoveBase } from '../../nodots-backgammon-types/src/move'
+import { BackgammonMoveBase } from '../../types/src/move'
 
 // Context object for analyzers, can be extended as needed
 export interface MoveAnalyzerContext {

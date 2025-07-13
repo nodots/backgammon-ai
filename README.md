@@ -149,7 +149,7 @@ cd gnubg && ./configure --help
 
 ### 🔌 **Revolutionary Plugin Architecture**
 
-Version 3.5.0 introduces a **groundbreaking plugin system** that transforms nodots-backgammon-ai into an **open, extensible platform** for backgammon AI development. The plugin system enables developers to create, share, and integrate diverse AI strategies seamlessly.
+Version 3.5.0 introduces a **groundbreaking plugin system** that transforms ai into an **open, extensible platform** for backgammon AI development. The plugin system enables developers to create, share, and integrate diverse AI strategies seamlessly.
 
 ### **Built-in Analyzers**
 
@@ -361,8 +361,8 @@ For position `gJ/4AFjgc3AEO`, gnubg provides detailed analysis:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/nodots/nodots-backgammon-ai.git
-cd nodots-backgammon-ai
+git clone https://github.com/nodots/ai.git
+cd ai
 ```
 
 2. Install dependencies:
