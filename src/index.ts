@@ -162,7 +162,14 @@ export { gnubg, GnubgIntegration }
 export { GnubgMoveAnalyzer } from '../plugins/gnubgMoveAnalyzer'
 export { NodotsAIMoveAnalyzer } from '../plugins/nodotsAIMoveAnalyzer'
 
-// Example usage (assuming you have a Position ID from backgammon-core):
+// Export WebSocket functionality
+export { AIWebSocketClient } from './websocket/AIWebSocketClient'
+export {
+  AIWebSocketService,
+  AIWebSocketServiceConfig,
+} from './websocket/AIWebSocketService'
+
+// Example usage (assuming you have a Position ID from nodots-backgammon-core):
 // async function main() {
 //   // Replace with a real Position ID from your game
 //   const examplePositionId = "4HPwATDgc/ABMA"; // Standard starting position
