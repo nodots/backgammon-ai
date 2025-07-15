@@ -1,6 +1,6 @@
 // Entry point for nodots-backgammon-ai
 import { exec } from 'child_process'
-import { BackgammonMoveBase } from '../../nodots-backgammon-types/src/move'
+import { BackgammonMoveBase } from '../../types/src/move'
 import { gnubg, GnubgIntegration } from './gnubg'
 import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers'
 
@@ -161,6 +161,13 @@ export { gnubg, GnubgIntegration }
 // Export AI plugins
 export { GnubgMoveAnalyzer } from '../plugins/gnubgMoveAnalyzer'
 export { NodotsAIMoveAnalyzer } from '../plugins/nodotsAIMoveAnalyzer'
+
+// Export WebSocket functionality
+export { AIWebSocketClient } from './websocket/AIWebSocketClient'
+export {
+  AIWebSocketService,
+  AIWebSocketServiceConfig,
+} from './websocket/AIWebSocketService'
 
 // Example usage (assuming you have a Position ID from nodots-backgammon-core):
 // async function main() {
