@@ -103,8 +103,7 @@ export async function getGnubgMoveHintLegacy(
  * @returns A promise that resolves with the best move string.
  */
 export async function getBestMoveForStartingPosition(): Promise<string> {
-  const startingPositionId = '4HPwATDgc/ABMA' // Standard starting position
-  return getGnubgMoveHint(startingPositionId)
+  return getGnubgMoveHint('4HPwATDgc/ABMA')
 }
 
 /**
@@ -172,7 +171,7 @@ export {
 // Example usage (assuming you have a Position ID from nodots-backgammon-core):
 // async function main() {
 //   // Replace with a real Position ID from your game
-//   const examplePositionId = "4HPwATDgc/ABMA"; // Standard starting position
+//   const examplePositionId = '4HPwATDgc/ABMA'; // Standard starting position
 //   console.log(\`Requesting hint for position: \${examplePositionId}\`);
 //
 //   try {
