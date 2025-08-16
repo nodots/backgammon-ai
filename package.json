@@ -38,7 +38,8 @@
     "gnubg:configure": "cd gnubg && ./configure --enable-simd=yes --disable-gtk --disable-cputest --without-board3d --without-python",
     "gnubg:build": "cd gnubg && make",
     "gnubg:install": "cd gnubg && sudo make install",
-    "gnubg:clean": "cd gnubg && make clean"
+    "gnubg:clean": "cd gnubg && make clean",
+    "install:latest-types": "rm -rf node_modules package-lock.json && npm install"
   },
   "dependencies": {
     "@types/socket.io-client": "^1.4.36",
