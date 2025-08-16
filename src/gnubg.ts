@@ -24,12 +24,18 @@ export class GnubgIntegration {
     if (this.isInitialized) return
 
     // Try to find gnubg in order of preference:
-    // 1. Local build in gnubg directory
-    // 2. System-wide installation
+    // 1. Bundled with the package (in dist/gnubg after build)
+    // 2. Development environment (gnubg directory)
+    // 3. System-wide installation
     const candidates = [
-      path.join(process.cwd(), 'gnubg', 'gnubg'), // Local build
-      path.join(__dirname, '..', 'gnubg', 'gnubg'), // Relative to src
-      'gnubg', // System PATH
+      // Production: bundled gnubg binary
+      path.join(__dirname, '..', 'gnubg', 'gnubg'),
+      // Development: local build
+      path.join(process.cwd(), 'gnubg', 'gnubg'),
+      // Alternative development path
+      path.join(__dirname, '..', '..', 'gnubg', 'gnubg'),
+      // System PATH
+      'gnubg',
     ]
 
     for (const candidate of candidates) {
@@ -104,12 +110,17 @@ export class GnubgIntegration {
       )
     }
 
+    // Properly escape commands to avoid shell injection issues
     const commandString = commands.join('\n')
-    const gnubgCommand = `echo "${commandString}" | ${this.gnubgPath} -t`
+    const escapedCommand = commandString.replace(/"/g, '\\"').replace(/\$/g, '\\$')
+    const gnubgCommand = `echo "${escapedCommand}" | ${this.gnubgPath} -t 2>&1`
 
     try {
-      const { stdout, stderr } = await execAsync(gnubgCommand)
-      if (stderr) {
+      const { stdout, stderr } = await execAsync(gnubgCommand, {
+        timeout: 5000, // Add timeout to prevent hanging
+        maxBuffer: 1024 * 1024 // 1MB buffer
+      })
+      if (stderr && !stderr.includes('CoreAudio')) {
         console.warn('gnubg stderr:', stderr)
       }
       return stdout

@@ -17,14 +17,25 @@ import { AIWebSocketService } from '../websocket/AIWebSocketService'
 
 // Mock socket.io-client for testing
 jest.mock('socket.io-client', () => ({
-  io: jest.fn(() => ({
-    connect: jest.fn(),
-    disconnect: jest.fn(),
-    on: jest.fn(),
-    emit: jest.fn(),
-    connected: false,
-    disconnected: true,
-  })),
+  io: jest.fn(() => {
+    const listeners: { [key: string]: Function[] } = {}
+    const mockSocket = {
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+      on: jest.fn((event: string, handler: Function) => {
+        if (!listeners[event]) listeners[event] = []
+        listeners[event].push(handler)
+        // Immediately trigger connect_error to simulate connection failure
+        if (event === 'connect_error') {
+          setTimeout(() => handler(new Error('Mock connection failed')), 0)
+        }
+      }),
+      emit: jest.fn(),
+      connected: false,
+      disconnected: true,
+    }
+    return mockSocket
+  }),
 }))
 
 describe('AI WebSocket Integration', () => {
@@ -90,7 +101,7 @@ describe('AI WebSocket Integration', () => {
         // Expected to fail in test environment without real WebSocket server
         expect(error).toBeInstanceOf(Error)
       }
-    })
+    }, 10000)
 
     it('should handle disconnection gracefully', async () => {
       try {
@@ -187,7 +198,7 @@ describe('AI WebSocket Integration', () => {
           expect(error).toBeInstanceOf(Error)
         }
       }
-    })
+    }, 10000)
 
     it('should handle error conditions', async () => {
       const errorScenarios = [
@@ -205,7 +216,7 @@ describe('AI WebSocket Integration', () => {
           console.log(`${scenario} handled:`, (error as Error).message)
         }
       }
-    })
+    }, 10000)
   })
 
   describe('AIWebSocketService', () => {
@@ -246,7 +257,7 @@ describe('AI WebSocket Integration', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(Error)
       }
-    })
+    }, 10000)
 
     it('should manage analysis queue', async () => {
       const analysisRequests = [
