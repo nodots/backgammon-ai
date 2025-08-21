@@ -154,12 +154,13 @@ export async function getGnubgInfo(): Promise<{
 // Re-export for convenience
 export * from './gnubgApi'
 export * from './moveAnalyzers'
+export * from './moveSelection'
 export * from './pluginLoader'
 export { gnubg, GnubgIntegration }
 
-// Export AI plugins
-export { GnubgMoveAnalyzer } from '../plugins/gnubgMoveAnalyzer'
-export { NodotsAIMoveAnalyzer } from '../plugins/nodotsAIMoveAnalyzer'
+// Export AI plugins (temporarily commented out due to ES module import issues)
+// export { GnubgMoveAnalyzer } from '../plugins/gnubgMoveAnalyzer'
+// export { NodotsAIMoveAnalyzer } from '../plugins/nodotsAIMoveAnalyzer'
 
 // Export WebSocket functionality
 export { AIWebSocketClient } from './websocket/AIWebSocketClient'
