@@ -2,11 +2,6 @@ import { exec } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { promisify } from 'util'
-import { fileURLToPath } from 'url'
-
-// ES module equivalent of __dirname
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 const execAsync = promisify(exec)
 
@@ -34,11 +29,11 @@ export class GnubgIntegration {
     // 3. System-wide installation
     const candidates = [
       // Production: bundled gnubg binary
-      path.join(__dirname, '..', 'gnubg', 'gnubg'),
+      path.join(process.cwd(), '..', 'gnubg', 'gnubg'),
       // Development: local build
       path.join(process.cwd(), 'gnubg', 'gnubg'),
       // Alternative development path
-      path.join(__dirname, '..', '..', 'gnubg', 'gnubg'),
+      path.join(process.cwd(), '..', '..', 'gnubg', 'gnubg'),
       // System PATH
       'gnubg',
     ]
