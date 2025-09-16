@@ -1,8 +1,8 @@
 // Entry point for backgammon-ai
 import { exec } from 'child_process'
 import { BackgammonMoveBase } from '../../types/src/move'
-import { gnubg, GnubgIntegration } from './gnubg'
-import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers'
+import { gnubg, GnubgIntegration } from './gnubg.js'
+import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers.js'
 
 /**
  * Parses the output from gnubg 'hint' command to extract the best move string.
@@ -152,10 +152,10 @@ export async function getGnubgInfo(): Promise<{
 }
 
 // Re-export for convenience
-export * from './gnubgApi'
-export * from './moveAnalyzers'
-export * from './moveSelection'
-export * from './pluginLoader'
+export * from './gnubgApi.js'
+export * from './moveAnalyzers.js'
+export * from './moveSelection.js'
+export * from './pluginLoader.js'
 export { gnubg, GnubgIntegration }
 
 // Export AI plugins (temporarily commented out due to ES module import issues)
@@ -163,11 +163,11 @@ export { gnubg, GnubgIntegration }
 // export { NodotsAIMoveAnalyzer } from '../plugins/nodotsAIMoveAnalyzer'
 
 // Export WebSocket functionality
-export { AIWebSocketClient } from './websocket/AIWebSocketClient'
+export { AIWebSocketClient } from './websocket/AIWebSocketClient.js'
 export {
   AIWebSocketService,
   AIWebSocketServiceConfig,
-} from './websocket/AIWebSocketService'
+} from './websocket/AIWebSocketService.js'
 
 // Example usage (assuming you have a Position ID from nodots-backgammon-core):
 // async function main() {

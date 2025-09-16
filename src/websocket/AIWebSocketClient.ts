@@ -9,8 +9,8 @@ import {
   WebSocketConnectionState,
   WebSocketMessage,
 } from '../../../types/src/websocket'
-import { gnubg } from '../gnubg'
-import { getGnubgMoveHint } from '../index'
+import { gnubg } from '../gnubg.js'
+import { getGnubgMoveHint } from '../index.js'
 
 /**
  * AI WebSocket Client for real-time game analysis and communication

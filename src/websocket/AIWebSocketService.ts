@@ -1,6 +1,6 @@
 import { WebSocketClientConfig } from '../../../types/src/websocket'
-import { gnubg } from '../gnubg'
-import { AIWebSocketClient } from './AIWebSocketClient'
+import { gnubg } from '../gnubg.js'
+import { AIWebSocketClient } from './AIWebSocketClient.js'
 
 /**
  * Configuration options for the AI WebSocket Service

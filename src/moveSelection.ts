@@ -9,16 +9,26 @@ import type {
   BackgammonCheckerContainer
 } from '@nodots-llc/backgammon-types/dist'
 import { getGnubgMoveHint } from './index.js'
+import { gnubg } from './gnubg.js'
+
+// Simple logger to avoid circular dependency with core
+const logger = {
+  info: (msg: string) => console.log(`[AI] [INFO] ${msg}`),
+  warn: (msg: string) => console.warn(`[AI] [WARN] ${msg}`),
+  error: (msg: string) => console.error(`[AI] [ERROR] ${msg}`),
+  debug: (msg: string) => console.log(`[AI] [DEBUG] ${msg}`)
+}
 
 /**
  * Main AI move selection function that tries multiple strategies in order:
- * 1. GNU Backgammon AI (if available)
+ * 1. GNU Backgammon AI (required for gbg-bot, optional for others)
  * 2. Opening book for common opening rolls
  * 3. Strategic heuristics
  * 4. Random selection (fallback)
  */
 export async function selectBestMove(
-  play: BackgammonPlayMoving
+  play: BackgammonPlayMoving,
+  playerNickname?: string
 ): Promise<BackgammonMoveReady | undefined> {
   if (!play.moves || play.moves.size === 0) return undefined
   
@@ -28,25 +38,59 @@ export async function selectBestMove(
   
   if (readyMoves.length === 0) return undefined
 
-  // Try GNU Backgammon first (if position ID available)
+  // Log AI engine selection process
+  const robotName = playerNickname || 'Unknown Robot'
+  logger.info(`[AI] ${robotName} starting move selection with ${readyMoves.length} available moves`)
+
+  // Check if this is gbg-bot - it MUST use GNU Backgammon
+  const isGbgBot = playerNickname === 'gbg-bot'
+  
+  if (isGbgBot) {
+    logger.info(`[AI] ${robotName} AI Engine: GNU Backgammon (required)`)
+    
+    // gbg-bot requires GNU Backgammon to be available
+    const isGnubgAvailable = await gnubg.isAvailable()
+    if (!isGnubgAvailable) {
+      const instructions = gnubg.getBuildInstructions()
+      logger.error(`[AI] ${robotName} GNU Backgammon not available - failing as required`)
+      throw new Error(
+        `gbg-bot cannot function without GNU Backgammon.\n\n${instructions}`
+      )
+    }
+    
+    logger.info(`[AI] ${robotName} GNU Backgammon available - checking integration`)
+    
+    // TODO: Add position ID generation and GNU BG integration for gbg-bot
+    // For now, gbg-bot fails until GNU BG integration is properly implemented
+    logger.error(`[AI] ${robotName} GNU Backgammon integration incomplete`)
+    throw new Error(
+      'gbg-bot requires GNU Backgammon integration which is currently broken. ' +
+      'Position ID generation and GNU BG command integration must be implemented.'
+    )
+  }
+
+  // For other bots, try GNU Backgammon first if available, but don't require it
   // TODO: Add position ID generation and GNU BG integration
 
+  // For other bots, indicate they use hybrid AI approach
+  logger.info(`[AI] ${robotName} AI Engine: Hybrid (Opening Book + Strategic Heuristics)`)
+
   // Try opening book for opening positions
-  const openingMove = getOpeningBookMove(readyMoves)
+  const openingMove = getOpeningBookMove(readyMoves, robotName)
   if (openingMove) {
-    console.log('🤖 [AI] Using opening book move')
+    logger.info(`[AI] ${robotName} Move selected via: Opening Book`)
     return openingMove
   }
 
   // Use strategic heuristics
-  const strategicMove = getBestStrategicMove(readyMoves)
+  const strategicMove = getBestStrategicMove(readyMoves, robotName)
   if (strategicMove) {
-    console.log('🤖 [AI] Using strategic move selection')
+    logger.info(`[AI] ${robotName} Move selected via: Strategic Heuristics`)
     return strategicMove
   }
 
   // Final fallback to first available move
-  console.log('🤖 [AI] Using fallback (first available move)')
+  logger.warn(`[AI] ${robotName} Move selected via: Fallback (first available move)`)
   return readyMoves[0]
 }
 
@@ -55,7 +99,8 @@ export async function selectBestMove(
  * Returns the theoretically best move for opening positions
  */
 function getOpeningBookMove(
-  readyMoves: BackgammonMoveReady[]
+  readyMoves: BackgammonMoveReady[],
+  robotName: string
 ): BackgammonMoveReady | undefined {
   // Get dice values from the moves
   const diceValues = extractDiceFromMoves(readyMoves)
@@ -90,7 +135,7 @@ function getOpeningBookMove(
         const destPos = getPositionNumber(firstPossibleMove.destination)
         
         if (originPos === 24 && destPos === 13 && preferredMove === '24/13') {
-          console.log(`🎯 [OpeningBook] Found Lover's Leap (24/13) for dice [${die1},${die2}]`)
+          logger.info(`[AI] ${robotName} Opening Book: Lover's Leap (24/13) for dice [${die1},${die2}]`)
           return move
         }
         // Add other opening book matches as needed
@@ -106,11 +151,14 @@ function getOpeningBookMove(
  * Prefers moves that advance checkers furthest
  */
 function getBestStrategicMove(
-  readyMoves: BackgammonMoveReady[]
+  readyMoves: BackgammonMoveReady[],
+  robotName: string
 ): BackgammonMoveReady | undefined {
   // Prefer moves that advance checkers furthest
   let bestMove = readyMoves[0]
   let bestDistance = 0
+
+  logger.debug(`[AI] ${robotName} Strategic analysis: evaluating ${readyMoves.length} moves`)
 
   for (const move of readyMoves) {
     if (move.possibleMoves && move.possibleMoves.length > 0) {
@@ -124,12 +172,14 @@ function getBestStrategicMove(
           if (distance > bestDistance) {
             bestDistance = distance
             bestMove = move
+            logger.debug(`[AI] ${robotName} Strategic: new best move ${originPos}→${destPos} (distance: ${distance})`)
           }
         }
       }
     }
   }
 
+  logger.info(`[AI] ${robotName} Strategic: selected move with distance ${bestDistance}`)
   return bestMove
 }
 
