@@ -185,11 +185,12 @@ function getBestStrategicMove(
 
 /**
  * Extract dice values from the available moves
+ * Note: For doubles (e.g., [3,3]), this will return [3,3,3,3] as expected
  */
 function extractDiceFromMoves(readyMoves: BackgammonMoveReady[]): number[] {
   const diceValues: number[] = []
   for (const move of readyMoves) {
-    if (move.dieValue && !diceValues.includes(move.dieValue)) {
+    if (move.dieValue) {
       diceValues.push(move.dieValue)
     }
   }
