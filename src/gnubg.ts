@@ -24,18 +24,18 @@ export class GnubgIntegration {
     if (this.isInitialized) return
 
     // Try to find gnubg in order of preference:
-    // 1. Bundled with the package (in dist/gnubg after build)
-    // 2. Development environment (gnubg directory)
-    // 3. System-wide installation
+    // 1. System-wide installation (most reliable)
+    // 2. Bundled with the package (in dist/gnubg after build)
+    // 3. Development environment (gnubg directory)
     const candidates = [
+      // System PATH (prioritized for reliability)
+      'gnubg',
       // Production: bundled gnubg binary
       path.join(process.cwd(), '..', 'gnubg', 'gnubg'),
       // Development: local build
       path.join(process.cwd(), 'gnubg', 'gnubg'),
       // Alternative development path
       path.join(process.cwd(), '..', '..', 'gnubg', 'gnubg'),
-      // System PATH
-      'gnubg',
     ]
 
     for (const candidate of candidates) {
