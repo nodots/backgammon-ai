@@ -13,7 +13,6 @@ import {
 } from '@jest/globals'
 import { gnubg } from '../gnubg'
 import { AIWebSocketClient } from '../websocket/AIWebSocketClient'
-import { AIWebSocketService } from '../websocket/AIWebSocketService'
 
 // Mock socket.io-client for testing
 jest.mock('socket.io-client', () => ({
@@ -219,94 +218,6 @@ describe('AI WebSocket Integration', () => {
     }, 10000)
   })
 
-  describe('AIWebSocketService', () => {
-    let service: AIWebSocketService
-
-    beforeEach(() => {
-      service = new AIWebSocketService({
-        enableAutoAnalysis: true,
-        analysisDelay: 100, // Short delay for testing
-        maxConcurrentAnalysis: 2,
-      })
-    })
-
-    afterEach(async () => {
-      if (service) {
-        await service.stop()
-      }
-    })
-
-    it('should initialize with configuration', () => {
-      expect(service).toBeDefined()
-      expect(typeof service.start).toBe('function')
-      expect(typeof service.stop).toBe('function')
-    })
-
-    it('should handle service lifecycle', async () => {
-      try {
-        await service.start('mock-auth-token')
-        // Should handle start without throwing
-      } catch (error) {
-        // Expected to fail without real WebSocket server
-        expect(error).toBeInstanceOf(Error)
-      }
-
-      try {
-        await service.stop()
-        // Should handle stop without throwing
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error)
-      }
-    }, 10000)
-
-    it('should manage analysis queue', async () => {
-      const analysisRequests = [
-        { gameId: 'game-1', positionId: '4HPwATDgc/ABMA', difficulty: 'easy' },
-        {
-          gameId: 'game-2',
-          positionId: 'XGID=-a-b-BB-B-a-e----B-Bb-AAA--:0:0:1:00:0:0:0:0:10',
-          difficulty: 'intermediate',
-        },
-        {
-          gameId: 'game-3',
-          positionId: '4HPwATDgc/ABMA',
-          difficulty: 'advanced',
-        },
-      ]
-
-      // Test queue management logic
-      for (const request of analysisRequests) {
-        expect(request.gameId).toBeDefined()
-        expect(request.positionId).toBeDefined()
-        expect(request.difficulty).toBeDefined()
-      }
-    })
-
-    it('should handle GNU Backgammon availability checks', async () => {
-      // Test that service properly checks GNU BG availability
-      const isAvailable = await gnubg.isAvailable()
-      expect(typeof isAvailable).toBe('boolean')
-
-      if (!isAvailable) {
-        console.warn(
-          'GNU Backgammon not available for WebSocket service testing'
-        )
-      } else {
-        console.log('GNU Backgammon available for WebSocket service testing')
-      }
-    })
-
-    it('should handle concurrent analysis limits', async () => {
-      const maxConcurrent = 2
-      const serviceWithLimits = new AIWebSocketService({
-        maxConcurrentAnalysis: maxConcurrent,
-        enableAutoAnalysis: true,
-      })
-
-      // Test that limits are respected (implementation dependent)
-      expect(serviceWithLimits).toBeDefined()
-    })
-  })
 
   describe('Real-time Game Analysis', () => {
     it('should handle game state updates', async () => {
@@ -395,12 +306,6 @@ describe('AI WebSocket Integration', () => {
 
   describe('Performance and Reliability', () => {
     it('should handle message rate limiting', async () => {
-      const client = new AIWebSocketClient({
-        url: 'wss://localhost:3443',
-        enableCompression: true,
-        autoReconnect: false,
-      })
-
       // Test rapid message sending
       const messages = Array(10)
         .fill(0)
@@ -435,12 +340,6 @@ describe('AI WebSocket Integration', () => {
     })
 
     it('should handle connection recovery', async () => {
-      const client = new AIWebSocketClient({
-        autoReconnect: true,
-        maxReconnectAttempts: 3,
-        reconnectInterval: 1000,
-      })
-
       // Test reconnection logic
       const connectionStates = [
         'connecting',
@@ -470,7 +369,7 @@ describe('AI WebSocket Integration', () => {
       // Simulate cleanup
       for (const client of clients) {
         try {
-          await client.disconnect()
+          client.disconnect()
         } catch (error) {
           // Expected in test environment
         }

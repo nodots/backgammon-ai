@@ -195,7 +195,7 @@ export class AIWebSocketClient {
       console.log(`AI WebSocket: Game state update for game ${data.game.id}`)
 
       // Provide AI analysis if game is in progress and has active play
-      if (data.gameStatus === 'playing' && data.game.activePlay) {
+      if (data.gameStatus === 'playing' && data.game.stateKind === 'moving' && 'activePlay' in data.game) {
         await this.analyzeGamePosition(data.game, message.gameId)
       }
     } catch (error) {
@@ -214,7 +214,7 @@ export class AIWebSocketClient {
       console.log(`AI WebSocket: Move executed by ${data.playerId}`)
 
       // Analyze the new position after the move
-      if (data.isValid && data.gameState.activePlay) {
+      if (data.isValid && data.gameState.stateKind === 'moving' && 'activePlay' in data.gameState) {
         await this.analyzeGamePosition(data.gameState, message.gameId)
       }
     } catch (error) {

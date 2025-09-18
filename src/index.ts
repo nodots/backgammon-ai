@@ -164,10 +164,6 @@ export { gnubg, GnubgIntegration }
 
 // Export WebSocket functionality
 export { AIWebSocketClient } from './websocket/AIWebSocketClient.js'
-export {
-  AIWebSocketService,
-  AIWebSocketServiceConfig,
-} from './websocket/AIWebSocketService.js'
 
 // Example usage (assuming you have a Position ID from nodots-backgammon-core):
 // async function main() {

@@ -68,9 +68,6 @@ npm run clean         # Remove dist and coverage directories
 
 4. **WebSocket Service** (`src/websocket/`)
    - `AIWebSocketClient` - Client for real-time game connections
-   - `AIWebSocketService` - Manages WebSocket lifecycle and analysis queue
-   - Automatic AI analysis for game events
-   - Queue management for concurrent analysis requests
 
 ### Key Dependencies
 
@@ -133,10 +130,8 @@ export class MyAnalyzer implements MoveAnalyzer {
 
 ## WebSocket Architecture
 
-The AI package includes a WebSocket service for real-time game analysis:
+The AI package includes a WebSocket client for real-time game analysis:
 - Connects to game server for live game events
-- Queues analysis requests to prevent overload
-- Configurable concurrency and delay settings
 - Automatic reconnection handling
 
 ## Build Process
