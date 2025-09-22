@@ -44,10 +44,10 @@ export async function selectBestMove(
 
   // Check if this is gbg-bot - it MUST use GNU Backgammon
   const isGbgBot = playerNickname === 'gbg-bot'
-  
+
   if (isGbgBot) {
     logger.info(`[AI] ${robotName} AI Engine: GNU Backgammon (required)`)
-    
+
     // gbg-bot requires GNU Backgammon to be available
     const isGnubgAvailable = await gnubg.isAvailable()
     if (!isGnubgAvailable) {
@@ -57,7 +57,7 @@ export async function selectBestMove(
         `gbg-bot cannot function without GNU Backgammon.\n\n${instructions}`
       )
     }
-    
+
     logger.info(`[AI] ${robotName} GNU Backgammon available - generating position ID`)
 
     try {
@@ -75,7 +75,10 @@ export async function selectBestMove(
         logger.info(`[AI] ${robotName} Move selected via: GNU Backgammon Engine`)
         return matchingMove
       } else {
-        logger.warn(`[AI] ${robotName} Could not match GNU BG recommendation "${gnubgMove}" to available moves`)
+        logger.error(`[AI] ${robotName} Could not match GNU BG recommendation "${gnubgMove}" to available moves`)
+        throw new Error(
+          `gbg-bot requires GNU Backgammon but could not match move recommendation "${gnubgMove}" to available moves`
+        )
       }
     } catch (error) {
       logger.error(`[AI] ${robotName} GNU Backgammon integration error: ${error}`)

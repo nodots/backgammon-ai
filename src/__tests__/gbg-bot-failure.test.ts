@@ -22,42 +22,42 @@ describe('gbg-bot GNU BG requirement', () => {
   } as any
 
   it('should fail when gbg-bot cannot access GNU Backgammon and log AI engine', async () => {
-    // Spy on logger to verify AI engine is logged
-    const loggerInfoSpy = jest.spyOn(console, 'info').mockImplementation()
+    // Spy on logger to verify AI engine is logged (logger.info uses console.log)
+    const loggerInfoSpy = jest.spyOn(console, 'log').mockImplementation()
     const loggerErrorSpy = jest.spyOn(console, 'error').mockImplementation()
-    
+
     await expect(selectBestMove(mockPlay, 'gbg-bot'))
       .rejects
-      .toThrow(/gbg-bot requires GNU Backgammon integration/)
-    
+      .toThrow(/gbg-bot requires GNU Backgammon but integration failed/)
+
     // Verify that the AI engine and failure were logged
     expect(loggerInfoSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[AI] gbg-bot starting move selection')
+      expect.stringContaining('[AI] [INFO] [AI] gbg-bot starting move selection')
     )
     expect(loggerErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[AI] gbg-bot GNU Backgammon integration incomplete')
+      expect.stringContaining('[AI] [ERROR] [AI] gbg-bot GNU Backgammon integration error')
     )
-    
+
     loggerInfoSpy.mockRestore()
     loggerErrorSpy.mockRestore()
   })
 
   it('should allow other bots to use fallback logic and log AI engine', async () => {
-    // Spy on logger to verify AI engine is logged
-    const loggerSpy = jest.spyOn(console, 'info').mockImplementation()
-    
+    // Spy on logger to verify AI engine is logged (logger.info uses console.log)
+    const loggerSpy = jest.spyOn(console, 'log').mockImplementation()
+
     const result = await selectBestMove(mockPlay, 'nbg-bot-v1')
     expect(result).toBeDefined()
     expect(result?.stateKind).toBe('ready')
-    
+
     // Verify that the AI engine was logged
     expect(loggerSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[AI] nbg-bot-v1 AI Engine: Hybrid (Opening Book + Strategic Heuristics)')
+      expect.stringContaining('[AI] [INFO] [AI] nbg-bot-v1 AI Engine: Nodots AI (GNU BG excluded)')
     )
     expect(loggerSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[AI] nbg-bot-v1 Move selected via: Strategic Heuristics')
+      expect.stringContaining('[AI] [INFO] [AI] nbg-bot-v1 Move selected via: Strategic Heuristics')
     )
-    
+
     loggerSpy.mockRestore()
   })
 
