@@ -17,16 +17,16 @@ import { AIWebSocketClient } from '../websocket/AIWebSocketClient'
 // Mock socket.io-client for testing
 jest.mock('socket.io-client', () => ({
   io: jest.fn(() => {
-    const listeners: { [key: string]: Function[] } = {}
+    const listeners: { [key: string]: Array<(...args: unknown[]) => void> } = {}
     const mockSocket = {
       connect: jest.fn(),
       disconnect: jest.fn(),
-      on: jest.fn((event: string, handler: Function) => {
+      on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
         if (!listeners[event]) listeners[event] = []
         listeners[event].push(handler)
         // Immediately trigger connect_error to simulate connection failure
         if (event === 'connect_error') {
-          setTimeout(() => handler(new Error('Mock connection failed')), 0)
+          globalThis.setTimeout(() => handler(new Error('Mock connection failed')), 0)
         }
       }),
       emit: jest.fn(),
@@ -201,12 +201,12 @@ describe('AI WebSocket Integration', () => {
 
     it('should handle error conditions', async () => {
       const errorScenarios = [
-        { scenario: 'Connection timeout', expectedError: /timeout/i },
-        { scenario: 'Invalid URL', expectedError: /url|uri/i },
-        { scenario: 'Network error', expectedError: /network|connection/i },
+        'Connection timeout',
+        'Invalid URL',
+        'Network error',
       ]
 
-      for (const { scenario, expectedError } of errorScenarios) {
+      for (const scenario of errorScenarios) {
         try {
           // These will likely fail in test environment - that's expected
           await client.connect()
@@ -370,7 +370,7 @@ describe('AI WebSocket Integration', () => {
       for (const client of clients) {
         try {
           client.disconnect()
-        } catch (error) {
+        } catch {
           // Expected in test environment
         }
       }

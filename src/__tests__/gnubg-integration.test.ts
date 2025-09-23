@@ -220,8 +220,6 @@ describe('GNU Backgammon Integration', () => {
 
     it('should handle API timeout gracefully', async () => {
       // Test with a very short timeout to simulate timeout scenario
-      const originalTimeout = setTimeout
-
       try {
         // This test validates timeout handling
         await expect(getBestMoveFromGnubg('timeout-test')).rejects.toThrow()
@@ -298,7 +296,7 @@ describe('GNU Backgammon Integration', () => {
         await expect(
           gnubg.executeCommand(['invalid command'])
         ).rejects.toThrow()
-      } catch (error) {
+      } catch {
         // Expected to fail
       }
 

@@ -158,13 +158,6 @@ export * from './moveSelection.js'
 export * from './pluginLoader.js'
 export { gnubg, GnubgIntegration }
 
-// Export AI plugins (temporarily commented out due to ES module import issues)
-// export { GnubgMoveAnalyzer } from '../plugins/gnubgMoveAnalyzer'
-// export { NodotsAIMoveAnalyzer } from '../plugins/nodotsAIMoveAnalyzer'
-
-// Export WebSocket functionality
-export { AIWebSocketClient } from './websocket/AIWebSocketClient.js'
-
 // Example usage (assuming you have a Position ID from nodots-backgammon-core):
 // async function main() {
 //   // Replace with a real Position ID from your game
