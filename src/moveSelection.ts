@@ -38,12 +38,29 @@ export async function selectBestMove(
   
   if (readyMoves.length === 0) return undefined
 
-  // Log AI engine selection process
-  const robotName = playerNickname || 'Unknown Robot'
-  logger.info(`[AI] ${robotName} starting move selection with ${readyMoves.length} available moves`)
+  // Determine identity. For now, only two robots exist: gbg-bot and nbg-bot-v1.
+  // Core currently passes userId here, not nickname. Hardcode detection by name or id.
+  const passedIdentifier = playerNickname || ''
+  const playerUserId = (play as any)?.player?.userId as string | undefined
+  const isRobot = !!(play as any)?.player?.isRobot
 
-  // Check if this is gbg-bot - it MUST use GNU Backgammon
-  const isGbgBot = playerNickname === 'gbg-bot'
+  // Known mapping (hardcoded for current system):
+  // gbg-bot userId observed in logs/tests: da7eac85-cf8f-49f4-b97d-9f40d3171b36
+  const KNOWN_GBG_BOT_IDS = new Set<string>([
+    'da7eac85-cf8f-49f4-b97d-9f40d3171b36',
+  ])
+
+  const isGbgBot =
+    passedIdentifier === 'gbg-bot' ||
+    (playerUserId ? KNOWN_GBG_BOT_IDS.has(playerUserId) : false)
+
+  // With only two robots in the system, treat any other robot as nbg-bot-v1
+  const isNbgBot =
+    passedIdentifier === 'nbg-bot-v1' || (isRobot && !isGbgBot)
+
+  // Use a friendly name in logs
+  const robotName = isGbgBot ? 'gbg-bot' : isNbgBot ? 'nbg-bot-v1' : (passedIdentifier || playerUserId || 'Unknown Robot')
+  logger.info(`[AI] ${robotName} starting move selection with ${readyMoves.length} available moves`)
 
   if (isGbgBot) {
     logger.info(`[AI] ${robotName} AI Engine: GNU Backgammon (required)`)
@@ -87,9 +104,6 @@ export async function selectBestMove(
       )
     }
   }
-
-  // Check if this is nbg-bot - it should NEVER use GNU Backgammon
-  const isNbgBot = playerNickname === 'nbg-bot-v1'
 
   if (isNbgBot) {
     logger.info(`[AI] ${robotName} AI Engine: Nodots AI (GNU BG excluded)`)
