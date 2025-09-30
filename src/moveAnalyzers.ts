@@ -1,9 +1,11 @@
+import type { HintRequest } from '@nodots-llc/gnubg-hints'
 import { BackgammonMoveBase } from '../../types/src/move'
 
 // Context object for analyzers, can be extended as needed
 export interface MoveAnalyzerContext {
   board?: any // Replace 'any' with your board type if available
   positionId?: string
+  hintRequest?: HintRequest
   [key: string]: any
 }
 

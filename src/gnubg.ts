@@ -1,208 +1,142 @@
-import { exec } from 'child_process'
-import fs from 'fs'
-import path from 'path'
-import { promisify } from 'util'
+import type {
+  DoubleHint,
+  HintConfig,
+  HintRequest,
+  MoveHint,
+  TakeHint,
+} from '@nodots-llc/gnubg-hints';
 
-const execAsync = promisify(exec)
+type GnubgHintsModule = typeof import('@nodots-llc/gnubg-hints');
+type GnubgHintsHandle = GnubgHintsModule['GnuBgHints'];
 
-/**
- * GNU Backgammon integration utility class
- * Provides methods to interact with gnubg either through local build or system installation
- */
-export class GnubgIntegration {
-  private gnubgPath: string | null = null
-  private isInitialized = false
+const buildInstructions = `
+The @nodots-llc/gnubg-hints native addon could not be loaded.
 
-  constructor() {
-    // Will be initialized on first use
+Troubleshooting steps:
+1. Ensure system build tools are installed (Node.js >= 18, Python 3, make, C/C++, and node-gyp prerequisites).
+2. Reinstall dependencies from this package directory:
+   npm install --build-from-source @nodots-llc/gnubg-hints
+3. If you are inside a workspace, run:
+   npm --prefix packages/ai install
+4. Refer to the @nodots-llc/gnubg-hints README for platform-specific setup details.
+`.trim();
+
+let modulePromise: Promise<GnubgHintsModule> | null = null;
+
+function loadAddon(): Promise<GnubgHintsModule> {
+  if (!modulePromise) {
+    modulePromise = import('@nodots-llc/gnubg-hints');
+  }
+  return modulePromise;
+}
+
+export class GnubgHintsIntegration {
+  private initialized = false;
+  private lastError: Error | null = null;
+
+  private async getAddon(): Promise<GnubgHintsHandle> {
+    try {
+      const addon = await loadAddon();
+      return addon.GnuBgHints;
+    } catch (error) {
+      const wrapped = new Error(
+        `${buildInstructions}\n\nUnderlying error: ${String(error)}`
+      );
+      (wrapped as Error & { cause?: unknown }).cause = error;
+      this.lastError = wrapped;
+      modulePromise = null;
+      throw wrapped;
+    }
   }
 
-  /**
-   * Initialize gnubg integration by detecting available gnubg installations
-   */
-  private async initialize(): Promise<void> {
-    if (this.isInitialized) return
+  private async ensureInitialized(weightsPath?: string) {
+    if (this.lastError) {
+      throw this.lastError;
+    }
 
-    // Try to find gnubg in order of preference:
-    // 1. System-wide installation (most reliable)
-    // 2. Bundled with the package (in dist/gnubg after build)
-    // 3. Development environment (gnubg directory)
-    const candidates = [
-      // System PATH (prioritized for reliability)
-      'gnubg',
-      // Production: bundled gnubg binary
-      path.join(process.cwd(), '..', 'gnubg', 'gnubg'),
-      // Development: local build
-      path.join(process.cwd(), 'gnubg', 'gnubg'),
-      // Alternative development path
-      path.join(process.cwd(), '..', '..', 'gnubg', 'gnubg'),
-    ]
-
-    for (const candidate of candidates) {
+    const addon = await this.getAddon();
+    if (!this.initialized) {
       try {
-        if (candidate === 'gnubg') {
-          // Test system installation
-          await execAsync('which gnubg')
-          this.gnubgPath = 'gnubg'
-          break
-        } else {
-          // Test local file
-          if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-            // Check if executable
-            try {
-              fs.accessSync(candidate, fs.constants.X_OK)
-              this.gnubgPath = candidate
-              break
-            } catch {
-              // Not executable, continue
-            }
-          }
-        }
-      } catch {
-        // Continue to next candidate
+        await addon.initialize(weightsPath);
+        this.initialized = true;
+      } catch (error) {
+        const wrapped = new Error(
+          `${buildInstructions}\n\nInitialization failed: ${String(error)}`
+        );
+        (wrapped as Error & { cause?: unknown }).cause = error;
+        this.lastError = wrapped;
+        this.initialized = false;
+        throw wrapped;
       }
     }
 
-    this.isInitialized = true
+    return addon;
   }
 
-  /**
-   * Get the path to gnubg executable
-   */
-  async getGnubgPath(): Promise<string | null> {
-    await this.initialize()
-    return this.gnubgPath
+  async initialize(options?: { weightsPath?: string; config?: Partial<HintConfig> }) {
+    const addon = await this.ensureInitialized(options?.weightsPath);
+    if (options?.config) {
+      addon.configure(options.config);
+    }
   }
 
-  /**
-   * Check if gnubg is available
-   */
   async isAvailable(): Promise<boolean> {
-    await this.initialize()
-    return this.gnubgPath !== null
-  }
-
-  /**
-   * Get gnubg version information
-   */
-  async getVersion(): Promise<string> {
-    await this.initialize()
-    if (!this.gnubgPath) {
-      throw new Error('gnubg is not available')
-    }
-
     try {
-      const { stdout } = await execAsync(`${this.gnubgPath} --version`)
-      return stdout.trim()
-    } catch (error) {
-      throw new Error(`Failed to get gnubg version: ${error}`)
-    }
-  }
-
-  /**
-   * Execute a gnubg command and return the output
-   */
-  async executeCommand(commands: string[]): Promise<string> {
-    await this.initialize()
-    if (!this.gnubgPath) {
-      throw new Error(
-        'gnubg is not available. Please build gnubg first using: npm run gnubg:configure && npm run gnubg:build'
-      )
-    }
-
-    // Properly escape commands to avoid shell injection issues
-    const commandString = commands.join('\n')
-    const escapedCommand = commandString.replace(/"/g, '\\"').replace(/\$/g, '\\$')
-    const gnubgCommand = `echo "${escapedCommand}" | ${this.gnubgPath} -t 2>&1`
-
-    try {
-      const { stdout, stderr } = await execAsync(gnubgCommand, {
-        timeout: 5000, // Add timeout to prevent hanging
-        maxBuffer: 1024 * 1024 // 1MB buffer
-      })
-      if (stderr && !stderr.includes('CoreAudio')) {
-        console.warn('gnubg stderr:', stderr)
-      }
-      return stdout
-    } catch (error) {
-      throw new Error(`Failed to execute gnubg command: ${error}`)
-    }
-  }
-
-  /**
-   * Analyze a position and get the best move
-   */
-  async getBestMove(positionId: string): Promise<string> {
-    const commands = ['new game', `set board ${positionId}`, 'hint']
-
-    const output = await this.executeCommand(commands)
-    return this.parseBestMoveFromHint(output)
-  }
-
-  /**
-   * Parse the best move from gnubg hint output
-   */
-  private parseBestMoveFromHint(hintOutput: string): string {
-    const lines = hintOutput.split('\n')
-
-    // Look for the best move line (usually starts with "1. ")
-    for (const line of lines) {
-      const match = line.match(
-        /^\s*1\.\s+[^\s]+\s+[^\s]+\s+((?:[a-zA-Z0-9*]+\/[a-zA-Z0-9*]+(?:\*|)?\s*)+)/
-      )
-      if (match) {
-        return match[1].trim()
-      }
-    }
-
-    // Fallback: look for "gnubg moves ..." line
-    for (const line of lines) {
-      const match = line.match(/gnubg moves ([\w/* ]+)\./i)
-      if (match) {
-        return match[1].trim()
-      }
-    }
-
-    throw new Error('Could not parse best move from gnubg output')
-  }
-
-  /**
-   * Check if local gnubg build exists
-   */
-  async hasLocalBuild(): Promise<boolean> {
-    const localPath = path.join(process.cwd(), 'gnubg', 'gnubg')
-    try {
-      const stat = fs.statSync(localPath)
-      return stat.isFile()
+      await this.ensureInitialized();
+      return true;
     } catch {
-      return false
+      return false;
     }
   }
 
-  /**
-   * Get build instructions if gnubg is not available
-   */
   getBuildInstructions(): string {
-    return `
-GNU Backgammon (gnubg) is not available. To build it locally:
+    return buildInstructions;
+  }
 
-1. Install dependencies (macOS with Homebrew):
-   brew install autoconf automake libtool pkg-config glib readline sqlite
+  async configure(config: Partial<HintConfig>): Promise<void> {
+    const addon = await this.ensureInitialized();
+    addon.configure(config);
+  }
 
-2. Configure and build (minimal configuration for AI use):
-   npm run gnubg:configure
-   npm run gnubg:build
+  async getMoveHints(
+    request: HintRequest,
+    maxHints?: number
+  ): Promise<MoveHint[]> {
+    const addon = await this.ensureInitialized();
+    return addon.getMoveHints(request, maxHints);
+  }
 
-3. Optional - install system-wide:
-   npm run gnubg:install
+  async getBestMove(
+    request: HintRequest,
+    maxHints = 1
+  ): Promise<MoveHint | null> {
+    const hints = await this.getMoveHints(request, maxHints);
+    return hints.length > 0 ? hints[0] : null;
+  }
 
-For other systems, see the README.md for detailed instructions.
-    `.trim()
+  async getDoubleHint(request: HintRequest): Promise<DoubleHint> {
+    const addon = await this.ensureInitialized();
+    return addon.getDoubleHint(request);
+  }
+
+  async getTakeHint(request: HintRequest): Promise<TakeHint> {
+    const addon = await this.ensureInitialized();
+    return addon.getTakeHint(request);
+  }
+
+  async shutdown(): Promise<void> {
+    if (!this.initialized) {
+      return;
+    }
+
+    try {
+      const addon = await this.getAddon();
+      addon.shutdown();
+    } finally {
+      this.initialized = false;
+      this.lastError = null;
+    }
   }
 }
 
-// Export singleton instance for convenience
-export const gnubg = new GnubgIntegration()
-
-// Legacy exports for backwards compatibility
-export { gnubg as default }
+export const gnubgHints = new GnubgHintsIntegration();
