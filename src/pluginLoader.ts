@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { MoveAnalyzer } from './moveAnalyzers'
+import { MoveAnalyzer } from './moveAnalyzers.js'
 
 export function loadAnalyzersFromPluginsDir(
   pluginsDir: string

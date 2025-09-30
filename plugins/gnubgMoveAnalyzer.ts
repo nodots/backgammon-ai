@@ -1,5 +1,6 @@
-import { BackgammonMoveBase } from '../../types/src/move'
-import { getBestMoveFromGnubg } from '../src/gnubgApi'
+import type { BackgammonMoveBase } from '../../types/src/move'
+import type { HintRequest } from '@nodots-llc/gnubg-hints'
+import { gnubgHints } from '../src/gnubg.js'
 import { MoveAnalyzer, MoveAnalyzerContext } from '../src/moveAnalyzers'
 
 export class GnubgMoveAnalyzer implements MoveAnalyzer {
@@ -7,21 +8,29 @@ export class GnubgMoveAnalyzer implements MoveAnalyzer {
     moves: BackgammonMoveBase[],
     context?: MoveAnalyzerContext
   ): Promise<BackgammonMoveBase | null> {
-    if (!moves.length) return null
-    const position = context?.positionId
-    if (!position) {
-      throw new Error('No positionId provided in context for GNUBG analysis')
-    }
-    try {
-      const gnubgOutput = await getBestMoveFromGnubg(position)
-      // TODO: Parse gnubgOutput to select the actual best move from the moves array
-      console.log('GNUBG output:', gnubgOutput)
-      // Placeholder: return the first move
-      return moves[0]
-    } catch (err) {
-      console.error('Error calling GNUBG API:', err)
+    if (!moves.length) {
       return null
     }
+
+    const hintRequest: HintRequest | undefined = context?.hintRequest
+    if (!hintRequest) {
+      console.warn(
+        '[GnubgMoveAnalyzer] context.hintRequest missing; returning first move fallback',
+      )
+      return moves[0]
+    }
+
+    try {
+      const hints = await gnubgHints.getMoveHints(hintRequest, 1)
+      if (!hints.length) {
+        return moves[0]
+      }
+    } catch (error) {
+      console.error('[GnubgMoveAnalyzer] failed to fetch hints', error)
+    }
+
+    // TODO: map structured hints to the provided moves.
+    return moves[0]
   }
 }
 

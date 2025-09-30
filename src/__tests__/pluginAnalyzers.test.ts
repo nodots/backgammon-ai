@@ -1,19 +1,13 @@
-// Mock axios before any imports
-jest.mock('axios', () => ({
-  post: jest.fn().mockResolvedValue({
-    data: { output: 'mocked gnubg output' },
-  }),
-}))
-
-// Mock getBestMoveFromGnubg to always resolve
-jest.mock('../gnubgApi', () => ({
-  getBestMoveFromGnubg: jest.fn().mockResolvedValue('mocked gnubg output'),
-}))
-
 import path from 'path'
+import type { MoveHint } from '@nodots-llc/gnubg-hints'
 import { loadAnalyzersFromPluginsDir } from '../pluginLoader'
 
-// Minimal local type for testing
+jest.mock('@nodots-llc/gnubg-hints')
+
+const { __setMockHints } = jest.requireMock('@nodots-llc/gnubg-hints') as {
+  __setMockHints: (hints: MoveHint[]) => void;
+};
+
 interface TestMove {
   id: string
   player: any
@@ -27,7 +21,6 @@ describe('Plugin Analyzers', () => {
   const pluginsDir = path.join(__dirname, '../../plugins')
   const analyzers = loadAnalyzersFromPluginsDir(pluginsDir)
 
-  // Minimal mock moves
   const moves: TestMove[] = [
     {
       id: '1',
@@ -55,6 +48,10 @@ describe('Plugin Analyzers', () => {
     },
   ]
 
+  beforeEach(() => {
+    __setMockHints([])
+  })
+
   it('randomMoveAnalyzer returns one of the moves', async () => {
     const move = await analyzers['randomMoveAnalyzer'].selectMove(moves as any)
     expect(moves).toContain(move)
@@ -62,21 +59,29 @@ describe('Plugin Analyzers', () => {
 
   it('furthestFromOffMoveAnalyzer returns the move with highest clockwise position', async () => {
     const move = await analyzers['furthestFromOffMoveAnalyzer'].selectMove(
-      moves as any
+      moves as any,
     )
-    expect(move).toBe(moves[1]) // clockwise: 20 is highest
+    expect(move).toBe(moves[1])
   })
 
   it('examplePluginAnalyzer returns the first move', async () => {
-    const move = await analyzers['examplePluginAnalyzer'].selectMove(
-      moves as any
-    )
+    const move = await analyzers['examplePluginAnalyzer'].selectMove(moves as any)
     expect(move).toBe(moves[0])
   })
 
-  it('gnubgMoveAnalyzer returns the first move (stub, logs GNUBG output)', async () => {
+  it('gnubgMoveAnalyzer falls back to the first move when no hints are provided', async () => {
     const move = await analyzers['gnubgMoveAnalyzer'].selectMove(moves as any, {
-      positionId: 'dummy-xgid-string',
+      hintRequest: {
+        board: { points: [], bar: {}, off: {} } as any,
+        dice: [0, 0],
+        cubeValue: 1,
+        cubeOwner: null,
+        matchScore: [0, 0],
+        matchLength: 0,
+        crawford: false,
+        jacoby: false,
+        beavers: false,
+      },
     })
     expect(move).toBe(moves[0])
   })

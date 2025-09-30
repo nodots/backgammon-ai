@@ -1,13 +1,12 @@
 {
   "name": "@nodots-llc/backgammon-ai",
-  "version": "3.7.0",
+  "version": "4.0.1",
   "description": "AI and integration for nodots-backgammon using gnubg as a backend engine with embedded source code.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/ai/src/index.js",
+  "types": "dist/ai/src/index.d.ts",
   "files": [
-    "dist",
-    "gnubg"
+    "dist"
   ],
   "keywords": [
     "backgammon",
@@ -34,22 +33,17 @@
     "prebuild": "npm run clean",
     "prepare": "npm run build",
     "publish": "npm publish --access public",
-    "setup-gnubg": "node scripts/setup-gnubg.js",
-    "gnubg:configure": "cd gnubg && ./configure --enable-simd=yes --disable-gtk --disable-cputest --without-board3d --without-python",
-    "gnubg:build": "cd gnubg && make",
-    "gnubg:install": "cd gnubg && sudo make install",
-    "gnubg:clean": "cd gnubg && make clean"
+    "install:latest-types": "rm -rf node_modules package-lock.json && npm install"
   },
   "dependencies": {
+    "@nodots-llc/gnubg-hints": "^1.0.1",
     "@types/socket.io-client": "^1.4.36",
-    "axios": "^1.9.0",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
-    "@types/axios": "^0.9.36",
     "@types/jest": "^29.5.14",
-    "@types/node": "^22.15.18",
+    "@types/node": "^22.18.3",
     "@typescript-eslint/eslint-plugin": "^8.23.0",
     "@typescript-eslint/parser": "^8.23.0",
     "eslint": "^9.19.0",

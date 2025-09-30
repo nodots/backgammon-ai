@@ -9,7 +9,7 @@
 
 <!-- COVERAGE-END -->
 
-A TypeScript library that provides AI capabilities for backgammon games using GNU Backgammon (gnubg) as the backend engine. This package is part of the Nodots Backgammon ecosystem and **includes the complete gnubg source code** for self-contained deployment.
+A TypeScript library that provides AI capabilities for backgammon games using the native `@nodots-llc/gnubg-hints` addon to access GNU Backgammon's evaluation engine. This package is part of the Nodots Backgammon ecosystem and focuses on structured hints rather than spawning external binaries.
 
 ## 🎯 What's New in v3.5.0
 
@@ -42,7 +42,7 @@ A TypeScript library that provides AI capabilities for backgammon games using GN
 
 ### 🚀 **Production Ready**
 
-- **Self-Contained**: Complete gnubg source code included - no external dependencies
+- **Native Hints**: Powered by the `@nodots-llc/gnubg-hints` addon – no external binaries to ship or manage
 - **TypeScript First**: Full type definitions and intelligent integration
 - **Cross-Platform**: Supports macOS, Linux with automated build scripts
 - **Comprehensive Analysis**: Equity calculations, move rankings, and probability analysis
@@ -59,91 +59,55 @@ npm install @nodots-llc/backgammon-ai
 Here are **tested position IDs** that work with the integrated gnubg engine:
 
 ```typescript
-import { GnubgIntegration } from '@nodots-llc/backgammon-ai'
+import { buildHintContextFromGame, gnubgHints } from '@nodots-llc/backgammon-ai'
+import type { BackgammonGame } from '@nodots-llc/backgammon-types'
 
-const gnubg = new GnubgIntegration()
+const game: BackgammonGame = /* obtain current game state */
+const { request } = buildHintContextFromGame(game)
+const [bestHint] = await gnubgHints.getMoveHints(request)
 
-// Example 1: Mid-game position (tested ✅)
-const bestMove1 = await gnubg.getBestMove('gF/xATDgc/AAOA')
-console.log('Best move:', bestMove1)
-
-// Example 2: Running game position (tested ✅)
-const bestMove2 = await gnubg.getBestMove('gJ/4AFjgc3AEO')
-console.log('Best move:', bestMove2)
-// Result: "24/20 16/13" (Equity: +0.466)
+console.log('Top-ranked move sequence:', bestHint?.moves)
+console.log('Equity:', bestHint?.equity)
 ```
 
-## GNU Backgammon (gnubg) Integration
+## GNU Backgammon Hints Integration
 
-This package includes the complete GNU Backgammon source code (version 1.08.003) in the `gnubg/` directory. You can build and install gnubg locally for optimal performance.
+As of v4.1, this package relies on the `@nodots-llc/gnubg-hints` native addon instead of bundling the entire GNU Backgammon source tree. The addon wraps GNU Backgammon's evaluation engine through N-API and ships with TypeScript definitions.
 
-### Prerequisites for Building gnubg
+### Requirements
 
-To build gnubg from the included source code, you'll need:
+- Node.js 18+
+- A working [node-gyp](https://github.com/nodejs/node-gyp) toolchain (Python 3, make, and a C/C++ compiler)
+- Platform-specific build tools (e.g., `xcode-select --install` on macOS, `build-essential` on Debian/Ubuntu)
 
-**Required:**
-
-- GLib >= 2.22
-- C compiler (gcc or clang recommended)
-- GNU make
-- autoconf >= 2.60
-- automake
-- libtool
-- pkg-config
-
-**Optional (but recommended):**
-
-- readline (for command line editing)
-- sqlite3 (for database support)
-- bison >= 2.4 (if modifying parser files)
-- flex >= 2.5.9 (if modifying lexer files)
-
-**Note:** GUI components (GTK+) and audio support are not required for AI integration.
-
-### Quick Setup
+### Installation
 
 ```bash
-# Automated setup with dependency checking
-npm run setup-gnubg
-
-# Manual build process
-npm run gnubg:configure
-npm run gnubg:build
-
-# Verify installation
-gnubg/gnubg --version
+npm install @nodots-llc/backgammon-ai
 ```
 
-### Building gnubg
+The native addon is compiled during installation; no additional scripts are required.
 
-```bash
-# Configure gnubg build (minimal configuration for AI use)
-npm run gnubg:configure
+### Advanced configuration
 
-# Build gnubg
-npm run gnubg:build
+```typescript
+import {
+  configureGnubgHints,
+  initializeGnubgHints,
+} from '@nodots-llc/backgammon-ai'
 
-# Install gnubg system-wide (optional)
-npm run gnubg:install
-
-# Clean gnubg build files
-npm run gnubg:clean
+await initializeGnubgHints({ weightsPath: '/path/to/gnubg.weights' })
+configureGnubgHints({ evalPlies: 2, moveFilter: 3 })
 ```
 
-### Manual Build (Advanced)
+- `weightsPath` lets you supply custom neural-network weights.
+- `configureGnubgHints` mirrors the tuning options provided by the addon (plies, move filters, pruning, etc.).
 
-```bash
-cd gnubg
-./configure --enable-simd=yes --disable-gtk --disable-cputest --without-board3d --without-python
-make
-sudo make install  # Optional: install system-wide
-```
+### Troubleshooting
 
-For more build options, see:
-
-```bash
-cd gnubg && ./configure --help
-```
+- Review `gnubgHints.getBuildInstructions()` for platform-specific guidance.
+- Rebuild manually with `npx node-gyp rebuild --ansi`.
+- Consult the [`@nodots-llc/gnubg-hints` README](https://www.npmjs.com/package/@nodots-llc/gnubg-hints) for detailed setup notes.
 
 ## Plugin System & AI Analyzers
 
@@ -275,74 +239,28 @@ The plugin system embodies our commitment to **open development**:
 
 ## Usage
 
-### Position Analysis with Plugin System
+### Retrieving structured hints
 
 ```typescript
 import {
-  GnubgIntegration,
-  NodotsAIMoveAnalyzer,
-  selectMoveFromList,
+  buildHintContextFromGame,
+  gnubgHints,
 } from '@nodots-llc/backgammon-ai'
 
-// Method 1: Direct GNU Backgammon integration
-const gnubg = new GnubgIntegration()
+const { request } = buildHintContextFromGame(gameState)
+const [topHint] = await gnubgHints.getMoveHints(request, 5)
 
-if (await gnubg.isAvailable()) {
-  const positionId = 'gJ/4AFjgc3AEO' // Tested position ID
-  const bestMove = await gnubg.getBestMove(positionId)
-  console.log('Best move:', bestMove) // "24/20 16/13"
-} else {
-  console.log(gnubg.getBuildInstructions())
-}
-
-// Method 2: Using the plugin system (recommended)
-const nodotsAI = new NodotsAIMoveAnalyzer()
-const intelligentMove = await selectMoveFromList(moves, nodotsAI)
-console.log('Intelligent move:', intelligentMove)
-
-// Method 3: Context-aware analysis
-const contextualMove = await nodotsAI.selectMove(moves, {
-  positionId: 'gJ/4AFjgc3AEO',
-  board: currentBoardState,
-})
+console.log('Top candidate moves:', topHint?.moves)
+console.log('Equity:', topHint?.equity)
 ```
 
-### Legacy Integration Methods
+### Selecting moves via analyzers
 
 ```typescript
-import { getGnubgMoveHint } from '@nodots-llc/backgammon-ai'
+import { selectBestMove } from '@nodots-llc/backgammon-ai'
+import type { BackgammonPlayMoving } from '@nodots-llc/backgammon-types'
 
-// Direct command execution (requires gnubg in PATH)
-const bestMove = await getGnubgMoveHint('4HPwATDgc/ABMA')
-```
-
-### HTTP API Integration
-
-```typescript
-import { getBestMoveFromGnubg } from '@nodots-llc/backgammon-ai'
-
-// Requires a gnubg HTTP server running on localhost:8000
-const bestMove = await getBestMoveFromGnubg(positionId)
-```
-
-## GNU Backgammon Features
-
-The included gnubg source provides world-class backgammon analysis:
-
-- **World-class AI**: Rates over 2000 on FIBS (First Internet Backgammon Server)
-- **Advanced Analysis**: Position evaluation, rollouts, match analysis
-- **Professional Strength**: 2-ply cubeful analysis with world-class evaluation
-- **Equity Calculations**: Detailed probability and equity analysis for each move
-- **Move Rankings**: Complete analysis of all legal moves with equity differences
-- **Database Support**: SQLite3, MySQL/MariaDB, PostgreSQL
-- **Flexible Output**: Supports multiple export formats (SGF, HTML, PDF, PNG, etc.)
-- **Scripting**: Python extension support
-- **Internationalization**: 15+ languages supported
-
-## Example Analysis Output
-
-For position `gJ/4AFjgc3AEO`, gnubg provides detailed analysis:
-
+const bestMove = await selectBestMove(play as BackgammonPlayMoving, 'gbg-bot')
 ```
 1. 24/20 16/13    Eq: +0.466 ⭐ BEST MOVE
    Win: 59.5%, Gammon: 22.5%, Backgammon: 2.4%
@@ -371,13 +289,7 @@ cd ai
 npm install
 ```
 
-3. Build gnubg (recommended):
-
-```bash
-npm run setup-gnubg
-```
-
-4. Verify functionality:
+3. Verify functionality:
 
 ```bash
 npm test
@@ -393,11 +305,6 @@ npm run build
 - `npm run lint` - Run ESLint
 - `npm run lint:fix` - Fix ESLint issues
 - `npm run clean` - Clean build artifacts
-- `npm run setup-gnubg` - Automated gnubg setup with dependency checking
-- `npm run gnubg:configure` - Configure gnubg build
-- `npm run gnubg:build` - Build gnubg from source
-- `npm run gnubg:install` - Install gnubg system-wide
-- `npm run gnubg:clean` - Clean gnubg build files
 
 ## Verified Compatibility
 
@@ -412,19 +319,15 @@ npm run build
 
 1. **Build fails with GTK errors**: Use minimal configuration (already set in npm scripts)
 2. **readline errors on macOS**: Fixed in v3.1.0 with compatibility patches
-3. **gnubg not found**: Run `npm run setup-gnubg` for automated setup
+3. **Native build fails**: Ensure a working node-gyp toolchain (`python3`, `make`, and a C/C++ compiler)
 
 ### Getting Help
 
-1. Check if gnubg builds: `npm run gnubg:configure && npm run gnubg:build`
-2. Verify binary: `gnubg/gnubg --version`
 3. Test integration: `npm test`
 
 ## License
 
 This project is licensed under the MIT License.
-
-**GNU Backgammon License**: The included gnubg source code is licensed under the GNU General Public License v3 or later. See `gnubg/COPYING` for details.
 
 ## Author
 

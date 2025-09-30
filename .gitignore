@@ -38,6 +38,11 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 
+# TypeScript build artifacts in plugins
+plugins/*.d.ts
+plugins/*.d.ts.map
+plugins/*.js
+
 # gnubg build artifacts
 gnubg/config.h
 gnubg/config.log
