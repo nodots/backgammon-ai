@@ -60,7 +60,7 @@ describe('Bar reentry dice usage bug', () => {
     const activePlay = Play.initialize(board, whitePlayer)
     
     // Check the initial moves created
-    const initialMoves = Array.from(activePlay.moves)
+    const initialMoves = activePlay.moves
     console.log('Initial moves:', initialMoves.map(m => ({
       dieValue: m.dieValue,
       moveKind: m.moveKind,
@@ -152,7 +152,7 @@ describe('Bar reentry dice usage bug', () => {
     }
     
     const activePlay = Play.initialize(board, whitePlayer)
-    const moves = Array.from(activePlay.moves)
+    const moves = activePlay.moves
     
     // Both moves should be reenter moves with different die values
     const reenterMoves = moves.filter(m => m.moveKind === 'reenter')

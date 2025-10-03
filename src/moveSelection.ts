@@ -36,9 +36,9 @@ export async function selectBestMove(
   play: BackgammonPlayMoving,
   playerNickname?: string
 ): Promise<BackgammonMoveReady | undefined> {
-  if (!play.moves || play.moves.size === 0) return undefined
-  
-  const readyMoves = Array.from(play.moves).filter(
+  if (!play.moves || play.moves.length === 0) return undefined
+
+  const readyMoves = play.moves.filter(
     (move) => move.stateKind === 'ready'
   ) as BackgammonMoveReady[]
   
