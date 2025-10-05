@@ -36,7 +36,7 @@
     "install:latest-types": "rm -rf node_modules package-lock.json && npm install"
   },
   "dependencies": {
-    "@nodots-llc/gnubg-hints": "^1.0.1",
+    "@nodots-llc/gnubg-hints": "^1.0.2",
     "@types/socket.io-client": "^1.4.36",
     "socket.io-client": "^4.8.1"
   },
