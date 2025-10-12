@@ -338,3 +338,5 @@ Ken Riley <kenr@nodots.com>
 - **GNU Backgammon Team**: For the excellent gnubg engine and analysis capabilities
 - **GNU Project**: For maintaining and developing gnubg as free software
 - **Backgammon Community**: For continued development and testing of gnubg
+
+> Minor README refresh.
