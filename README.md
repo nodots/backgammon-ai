@@ -1,5 +1,7 @@
 # Nodots Backgammon AI
 
+Current version: 4.1.1.
+
 <!-- COVERAGE-START -->
 
 ![Statements](https://img.shields.io/badge/Statements-60%25-orange?style=flat-square)
