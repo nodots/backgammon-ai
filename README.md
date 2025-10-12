@@ -340,3 +340,10 @@ Ken Riley <kenr@nodots.com>
 - **Backgammon Community**: For continued development and testing of gnubg
 
 > Minor README refresh.
+
+## Package split
+- New MIT core: @nodots-llc/backgammon-ai-core
+- Optional GNU adapter (GPL): @nodots-llc/backgammon-ai-gnubg
+
+Migration:
+- Install ai-core and (optionally) ai-gnubg & gnubg-hints
