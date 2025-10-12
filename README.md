@@ -1,4 +1,5 @@
 # Nodots Backgammon AI
+Current version: 4.1.1.
 
 <!-- COVERAGE-START -->
 
