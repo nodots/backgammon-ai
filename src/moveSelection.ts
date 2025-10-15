@@ -16,6 +16,10 @@ import {
   getNormalizedPosition,
 } from './hintContext.js';
 import { gnubgHints } from './gnubg.js';
+import { selectMoveWithPolicy } from './training/policyModel.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Simple logger to avoid circular dependency with core
 const logger = {
@@ -124,6 +128,27 @@ export async function selectBestMove(
 
   if (isNbgBot) {
     logger.info(`[AI] ${robotName} AI Engine: Nodots AI (GNU BG excluded)`)
+
+    // Try trained policy first if available
+    try {
+      const modelDir = resolveModelDir();
+      const modelPath = modelDir ? path.join(modelDir, 'model.json') : undefined;
+      if (modelPath && fs.existsSync(modelPath)) {
+        const raw = fs.readFileSync(modelPath, 'utf-8');
+        const model = JSON.parse(raw);
+        const policyMove = selectMoveWithPolicy(play, model);
+        if (policyMove) {
+          logger.info(`[AI] ${robotName} Move selected via: Trained Policy`);
+          (policyMove as any).__source = 'policy';
+          return policyMove;
+        }
+        logger.warn(`[AI] ${robotName} Policy available but no move matched; falling back`);
+      } else {
+        logger.debug(`[AI] ${robotName} No trained policy found (searched: ${modelPath || 'n/a'})`);
+      }
+    } catch (err) {
+      logger.warn(`[AI] ${robotName} Policy load error: ${String(err)} (falling back)`);
+    }
   } else {
     // For other bots (not gbg-bot, not nbg-bot), indicate they use hybrid AI approach
     logger.info(`[AI] ${robotName} AI Engine: Hybrid (Opening Book + Strategic Heuristics)`)
@@ -365,4 +390,26 @@ function formatMoveStep(step: NormalizedMoveStep | undefined): string {
     return 'unknown-move';
   }
   return `${step.from}:${step.to}:${step.fromContainer}->${step.toContainer}`;
+}
+
+function resolveModelDir(): string | undefined {
+  // Priority: env var -> repo-local models/latest relative to package
+  const env = process.env.NDBG_MODEL_DIR
+  if (env && fs.existsSync(env)) return env
+
+  try {
+    // Resolve package root from current module
+    const __filename = fileURLToPath(import.meta.url)
+    const __dirname = path.dirname(__filename)
+    // dist/ai/src -> dist/ai/models/latest
+    const candidate = path.resolve(__dirname, '..', 'models', 'latest')
+    if (fs.existsSync(candidate)) return candidate
+  } catch {}
+
+  try {
+    // Try project-local ai/models/latest from cwd
+    const cwdCandidate = path.resolve(process.cwd(), 'ai', 'models', 'latest')
+    if (fs.existsSync(cwdCandidate)) return cwdCandidate
+  } catch {}
+  return undefined
 }
