@@ -105,6 +105,7 @@ export async function selectBestMove(
         logger.info(
           `[AI] ${robotName} Move selected via: GNU Backgammon Engine (hint rank ${hint.rank})`,
         );
+        ;(move as any).__source = 'gnu-hint'
         return move;
       }
 
@@ -132,6 +133,7 @@ export async function selectBestMove(
   const openingMove = getOpeningBookMove(readyMoves, robotName)
   if (openingMove) {
     logger.info(`[AI] ${robotName} Move selected via: Opening Book`)
+    ;(openingMove as any).__source = 'opening'
     return openingMove
   }
 
@@ -139,11 +141,13 @@ export async function selectBestMove(
   const strategicMove = getBestStrategicMove(readyMoves, robotName)
   if (strategicMove) {
     logger.info(`[AI] ${robotName} Move selected via: Strategic Heuristics`)
+    ;(strategicMove as any).__source = 'strategic'
     return strategicMove
   }
 
   // Final fallback to first available move
   logger.warn(`[AI] ${robotName} Move selected via: Fallback (first available move)`)
+  ;(readyMoves[0] as any).__source = 'fallback'
   return readyMoves[0]
 }
 
@@ -183,10 +187,11 @@ function getOpeningBookMove(
     if (move.possibleMoves && move.possibleMoves.length > 0) {
       const firstPossibleMove = move.possibleMoves[0]
       if (firstPossibleMove.origin && firstPossibleMove.destination) {
-        // Extract position numbers for comparison
-        const originPos = getPositionNumber(firstPossibleMove.origin)
-        const destPos = getPositionNumber(firstPossibleMove.destination)
-        
+        // Normalize to mover perspective so openings match symmetrically
+        const normalizedColor = (move.player as any).direction === 'clockwise' ? 'white' : 'black'
+        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, normalizedColor as any)
+        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, normalizedColor as any)
+
         if (originPos === 24 && destPos === 13 && preferredMove === '24/13') {
           logger.info(`[AI] ${robotName} Opening Book: Lover's Leap (24/13) for dice [${die1},${die2}]`)
           return move
