@@ -40,7 +40,8 @@
     "prebuild": "npm run clean",
     "prepare": "npm run build",
     "publish": "npm publish --access public",
-    "install:latest-types": "rm -rf node_modules package-lock.json && npm install"
+    "install:latest-types": "rm -rf node_modules package-lock.json && npm install",
+    "prepublishOnly": "npm run build && node ../../scripts/lint-versions.js"
   },
   "dependencies": {
     "@nodots-llc/gnubg-hints": "^1.0.2",
@@ -60,4 +61,3 @@
     "typescript": "^5.7.3"
   }
 }
-    "prepublishOnly": "npm run build && node ../../scripts/lint-versions.js",

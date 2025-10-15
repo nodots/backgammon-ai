@@ -217,11 +217,14 @@ function getBestStrategicMove(
     if (move.possibleMoves && move.possibleMoves.length > 0) {
       const firstPossibleMove = move.possibleMoves[0]
       if (firstPossibleMove.origin && firstPossibleMove.destination) {
-        const originPos = getPositionNumber(firstPossibleMove.origin)
-        const destPos = getPositionNumber(firstPossibleMove.destination)
-        
-        if (originPos && destPos) {
-          const distance = originPos - destPos // Positive means advancing
+        // Normalize positions to the moving player's perspective so that
+        // advancing always corresponds to decreasing index (white perspective)
+        const normalizedColor = (move.player as any).direction === 'clockwise' ? 'white' : 'black'
+        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, normalizedColor as any)
+        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, normalizedColor as any)
+
+        if (originPos !== null && destPos !== null) {
+          const distance = originPos - destPos // Positive means advancing in normalized coordinates
           if (distance > bestDistance) {
             bestDistance = distance
             bestMove = move
