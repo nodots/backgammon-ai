@@ -1,0 +1,8 @@
+{
+  "total": 50000,
+  "correct": 44139,
+  "predicted": 50000,
+  "accuracy": 0.88278,
+  "coverage": 1,
+  "dataDir": "/Users/kenr/Code/nodots-backgammon/packages/ai/training/NDBG-AI-20251015162408"
+}
