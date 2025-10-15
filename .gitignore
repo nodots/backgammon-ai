@@ -27,6 +27,9 @@ node_modules/
 # Compiled output
 dist/
 
+# training files
+training/
+
 # IDE
 .vscode/
 .idea/

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import { trainFrequencyModelFromJsonlDir, savePolicyModel } from './policyModel.js'
 
 function usage() {
@@ -18,9 +19,26 @@ async function main() {
   console.log(`Training frequency policy from ${absData}${limit ? ` (limit ${limit})` : ''}`)
   const model = await trainFrequencyModelFromJsonlDir({ inputDir: absData, limit })
 
-  const outDir = path.join(process.cwd(), 'ai', 'models', makeVersionTag())
+  // Resolve models directory relative to the package root (stable regardless of CWD)
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = path.dirname(__filename)
+  const pkgRoot = path.resolve(__dirname, '../../../..')
+  const outDir = path.join(pkgRoot, 'ai', 'models', makeVersionTag())
   const file = savePolicyModel(model, outDir)
   console.log(`Model saved: ${file}`)
+
+  // Write training manifest for traceability
+  try {
+    const manifest = {
+      kind: 'training-manifest',
+      modelKind: 'frequency-policy-v1',
+      createdAt: new Date().toISOString(),
+      dataDir: absData,
+      limit: typeof limit === 'number' ? limit : null,
+      outDir,
+    }
+    fs.writeFileSync(path.join(outDir, 'training-manifest.json'), JSON.stringify(manifest, null, 2))
+  } catch {}
 }
 
 function makeVersionTag(): string {
@@ -36,4 +54,3 @@ function readArg(name: string, args: string[]): string | undefined {
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })
-
