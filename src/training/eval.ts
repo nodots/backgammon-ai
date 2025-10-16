@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import readline from 'readline'
 import { loadPolicyModel } from './policyModel.js'
+import { predictLinearTop1 } from './linearModel.js'
 
 interface Sample { featureHash: string; teacher?: { steps?: any[] } }
 
@@ -24,6 +25,7 @@ async function main() {
 
   let total = 0
   let correct = 0
+  let predicted = 0
   const files = fs.readdirSync(absData).filter(f => f.endsWith('.jsonl')).sort()
   for (const file of files) {
     const rl = readline.createInterface({ input: fs.createReadStream(path.join(absData, file)) })
@@ -33,12 +35,18 @@ async function main() {
         const sample: Sample = JSON.parse(line)
         const fh = sample.featureHash
         if (!fh) continue
-        const pred = model.top1[fh]
-        if (!pred) continue
         const teacherFirst = firstStepKey(sample)
         if (!teacherFirst) continue
         total += 1
-        if (pred === teacherFirst) correct += 1
+        let pred: string | undefined
+        if ((model as any)?.kind === 'linear-policy-v1') {
+          pred = predictLinearTop1(sample, model as any)
+          if (typeof pred !== 'undefined') predicted += 1
+        } else {
+          pred = (model as any).top1?.[fh]
+          if (typeof pred !== 'undefined') predicted += 1
+        }
+        if (pred && pred === teacherFirst) correct += 1
         if (limit && total >= limit) break
       } catch {}
     }
@@ -46,11 +54,15 @@ async function main() {
   }
 
   const acc = total > 0 ? correct / total : 0
-  const metrics = { total, correct, accuracy: acc }
+  const cov = total > 0 ? predicted / total : 0
+  const metrics = { total, correct, predicted, accuracy: acc, coverage: cov, dataDir: absData }
   const outDir = path.join(absModel)
   fs.writeFileSync(path.join(outDir, 'metrics.json'), JSON.stringify(metrics, null, 2))
-  fs.writeFileSync(path.join(outDir, 'REPORT.md'), `# Evaluation\n\n- Samples: ${total}\n- Top-1 Agreement: ${(acc * 100).toFixed(2)}%\n`)
-  console.log(`Top-1 agreement: ${(acc * 100).toFixed(2)}% on ${total} samples`)
+  fs.writeFileSync(
+    path.join(outDir, 'REPORT.md'),
+    `# Evaluation\n\n- Samples: ${total}\n- Top-1 Agreement: ${(acc * 100).toFixed(2)}%\n- Coverage: ${(cov * 100).toFixed(2)}%\n`
+  )
+  console.log(`Top-1 agreement: ${(acc * 100).toFixed(2)}% on ${total} samples (coverage ${(cov * 100).toFixed(2)}%)`)
 }
 
 function firstStepKey(sample: any): string | null {
@@ -66,4 +78,3 @@ function readArg(name: string, args: string[]): string | undefined {
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })
-

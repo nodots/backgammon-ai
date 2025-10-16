@@ -9,6 +9,13 @@ import type {
 import { gnubgHints, GnubgHintsIntegration } from './gnubg.js';
 import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers.js';
 
+// Self-register GNU AI provider with CORE
+import { RobotAIRegistry } from '@nodots-llc/backgammon-core';
+import { GNUAIProvider } from './GNUAIProvider.js';
+
+// Auto-register when this package is imported
+RobotAIRegistry.register(new GNUAIProvider());
+
 export type { DoubleHint, HintConfig, HintRequest, MoveHint, TakeHint };
 export { gnubgHints, GnubgHintsIntegration };
 
@@ -66,3 +73,7 @@ export * from './hintContext.js';
 export * from './training/features.js';
 export * from './training/dataset.js';
 export * from './training/policyModel.js';
+
+// Export AI provider implementations
+export { GNUAIProvider } from './GNUAIProvider.js';
+export { executeRobotTurnWithGNU } from './robotExecution.js';

@@ -27,6 +27,13 @@ node_modules/
 # Compiled output
 dist/
 
+# training files
+training/
+
+# AI model files (generated artifacts, should not be in version control)
+models/
+ai/models/
+
 # IDE
 .vscode/
 .idea/
