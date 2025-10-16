@@ -9,12 +9,20 @@ import type {
 import { gnubgHints, GnubgHintsIntegration } from './gnubg.js';
 import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers.js';
 
-// Self-register GNU AI provider with CORE
-import { RobotAIRegistry } from '@nodots-llc/backgammon-core';
-import { GNUAIProvider } from './GNUAIProvider.js';
+// Lazy registration to avoid circular dependency during module initialization
+// The registration happens when registerAIProvider() is called, not at import time
+let registered = false;
 
-// Auto-register when this package is imported
-RobotAIRegistry.register(new GNUAIProvider());
+export async function registerAIProvider(): Promise<void> {
+  if (registered) return;
+
+  // Dynamic imports to break circular dependency (ESM-compatible)
+  const { RobotAIRegistry } = await import('@nodots-llc/backgammon-core');
+  const { GNUAIProvider } = await import('./GNUAIProvider.js');
+
+  RobotAIRegistry.register(new GNUAIProvider());
+  registered = true;
+}
 
 export type { DoubleHint, HintConfig, HintRequest, MoveHint, TakeHint };
 export { gnubgHints, GnubgHintsIntegration };
