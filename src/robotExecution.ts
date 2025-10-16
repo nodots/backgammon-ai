@@ -18,7 +18,17 @@ import {
   BackgammonRoll,
 } from '@nodots-llc/backgammon-types'
 import { GnuBgHints, MoveStep } from '@nodots-llc/gnubg-hints'
-import { Board } from '@nodots-llc/backgammon-core'
+
+// Lazy import to break circular dependency (ESM-compatible)
+// Board is only needed during execution, not module initialization
+let Board: any = null
+const getBoard = async () => {
+  if (!Board) {
+    const core = await import('@nodots-llc/backgammon-core')
+    Board = core.Board
+  }
+  return Board
+}
 
 // Simple logger to avoid circular dependency issues
 const logger = {
@@ -147,7 +157,11 @@ export const executeRobotTurnWithGNU = async (
     throw new Error('Invalid board structure: missing or invalid points array')
   }
 
-  hint.moves.forEach((m, index) => {
+  // Get Board utility once (lazy loaded)
+  const BoardUtil = await getBoard()
+
+  for (let index = 0; index < hint.moves.length; index++) {
+    const m = hint.moves[index]
     // Use the updated game state with current board for each move
     const gameWithUpdatedBoard = {
       ...updateableGame,
@@ -158,7 +172,7 @@ export const executeRobotTurnWithGNU = async (
       gameWithUpdatedBoard
     )
 
-    updateableBoard = Board.moveChecker(
+    updateableBoard = BoardUtil.moveChecker(
       updateableBoard,
       origin,
       destination,
@@ -181,7 +195,7 @@ export const executeRobotTurnWithGNU = async (
 
     // Update the game reference for next iteration
     updateableGame = gameWithUpdatedBoard
-  })
+  }
 
   const robotAfterMove: BackgammonPlayerInactive = {
     ...activePlayer,
