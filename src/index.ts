@@ -78,9 +78,10 @@ export * from './moveAnalyzers.js';
 export * from './moveSelection.js';
 export * from './pluginLoader.js';
 export * from './hintContext.js';
-export * from './training/features.js';
-export * from './training/dataset.js';
-export * from './training/policyModel.js';
+// Training modules are not part of the current distribution
+// export * from './training/features.js';
+// export * from './training/dataset.js';
+// export * from './training/policyModel.js';
 
 // Export AI provider implementations
 export { GNUAIProvider } from './GNUAIProvider.js';

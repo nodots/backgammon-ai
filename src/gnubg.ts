@@ -6,8 +6,8 @@ import type {
   TakeHint,
 } from '@nodots-llc/gnubg-hints';
 
-type GnubgHintsModule = typeof import('@nodots-llc/gnubg-hints');
-type GnubgHintsHandle = GnubgHintsModule['GnuBgHints'];
+type GnubgHintsModule = any;
+type GnubgHintsHandle = any;
 
 const buildInstructions = `
 The @nodots-llc/gnubg-hints native addon could not be loaded.
@@ -24,10 +24,10 @@ Troubleshooting steps:
 let modulePromise: Promise<GnubgHintsModule> | null = null;
 
 function loadAddon(): Promise<GnubgHintsModule> {
-  if (!modulePromise) {
-    modulePromise = import('@nodots-llc/gnubg-hints');
-  }
-  return modulePromise;
+    if (!modulePromise) {
+    modulePromise = import('@nodots-llc/gnubg-hints') as any;
+    }
+  return modulePromise!;
 }
 
 export class GnubgHintsIntegration {
