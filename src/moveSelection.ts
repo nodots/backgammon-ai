@@ -16,7 +16,20 @@ import {
   getNormalizedPosition,
 } from './hintContext.js';
 import { gnubgHints } from './gnubg.js';
-import { selectMoveWithPolicy } from './training/policyModel.js';
+// Optional policy model support (not required for baseline build)
+let selectMoveWithPolicy: ((play: BackgammonPlayMoving, model: any) => BackgammonMoveReady | undefined) | null = null
+async function tryLoadPolicyModel() {
+  if (selectMoveWithPolicy) return selectMoveWithPolicy
+  try {
+    const path = './training/' + 'policyModel.js'
+    const mod = await import(path as any)
+    // @ts-ignore
+    selectMoveWithPolicy = mod.selectMoveWithPolicy
+  } catch {
+    selectMoveWithPolicy = null
+  }
+  return selectMoveWithPolicy
+}
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -136,11 +149,14 @@ export async function selectBestMove(
       if (modelPath && fs.existsSync(modelPath)) {
         const raw = fs.readFileSync(modelPath, 'utf-8');
         const model = JSON.parse(raw);
-        const policyMove = selectMoveWithPolicy(play, model);
-        if (policyMove) {
-          logger.info(`[AI] ${robotName} Move selected via: Trained Policy`);
-          (policyMove as any).__source = 'policy';
-          return policyMove;
+        const policy = await tryLoadPolicyModel()
+        if (policy) {
+          const policyMove = policy(play, model);
+          if (policyMove) {
+            logger.info(`[AI] ${robotName} Move selected via: Trained Policy`);
+            (policyMove as any).__source = 'policy';
+            return policyMove;
+          }
         }
         logger.warn(`[AI] ${robotName} Policy available but no move matched; falling back`);
       } else {
