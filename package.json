@@ -1,10 +1,10 @@
 {
   "name": "@nodots-llc/backgammon-ai",
-  "version": "4.1.2",
+  "version": "4.5.0",
   "description": "AI and integration for nodots-backgammon using the @nodots-llc/gnubg-hints native addon.",
   "type": "module",
-  "main": "dist/ai/src/index.js",
-  "types": "dist/ai/src/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
@@ -19,6 +19,10 @@
   ],
   "author": "Ken Riley <kenr@nodots.com>",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/nodots/nodots-backgammon.git",
@@ -35,7 +39,7 @@
     "update-coverage": "node scripts/update-coverage.js",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "build": "tsc",
+    "build": "tsc -b --force",
     "train": "node dist/ai/src/training/train.js --data training",
     "train:latest": "node scripts/train-latest.js",
     "train:linear": "node dist/ai/src/training/train-linear.js --data training",
@@ -48,11 +52,13 @@
     "clean": "rm -rf dist coverage",
     "prebuild": "npm run clean",
     "prepare": "npm run build",
-    "publish": "npm publish --access public",
+    "publish": "npm publish --access public --provenance",
     "install:latest-types": "rm -rf node_modules package-lock.json && npm install",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@nodots-llc/backgammon-types": "^4.5.0",
+    "@nodots-llc/backgammon-core": "^4.5.0",
     "@nodots-llc/gnubg-hints": "^1.0.2",
     "@types/socket.io-client": "^1.4.36",
     "socket.io-client": "^4.8.1"
@@ -68,5 +74,9 @@
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
+  }
+  ,
+  "engines": {
+    "node": ">=18"
   }
 }

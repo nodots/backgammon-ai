@@ -9,6 +9,21 @@ import type {
 import { gnubgHints, GnubgHintsIntegration } from './gnubg.js';
 import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers.js';
 
+// Lazy registration to avoid circular dependency during module initialization
+// The registration happens when registerAIProvider() is called, not at import time
+let registered = false;
+
+export async function registerAIProvider(): Promise<void> {
+  if (registered) return;
+
+  // Dynamic imports to break circular dependency (ESM-compatible)
+  const { RobotAIRegistry } = await import('@nodots-llc/backgammon-core');
+  const { GNUAIProvider } = await import('./GNUAIProvider.js');
+
+  RobotAIRegistry.register(new GNUAIProvider());
+  registered = true;
+}
+
 export type { DoubleHint, HintConfig, HintRequest, MoveHint, TakeHint };
 export { gnubgHints, GnubgHintsIntegration };
 
@@ -63,6 +78,11 @@ export * from './moveAnalyzers.js';
 export * from './moveSelection.js';
 export * from './pluginLoader.js';
 export * from './hintContext.js';
-export * from './training/features.js';
-export * from './training/dataset.js';
-export * from './training/policyModel.js';
+// Training modules are not part of the current distribution
+// export * from './training/features.js';
+// export * from './training/dataset.js';
+// export * from './training/policyModel.js';
+
+// Export AI provider implementations
+export { GNUAIProvider } from './GNUAIProvider.js';
+export { executeRobotTurnWithGNU } from './robotExecution.js';
