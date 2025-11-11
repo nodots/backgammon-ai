@@ -50,7 +50,8 @@
     "clean": "rm -rf dist coverage",
     "prebuild": "npm run clean",
     "prepare": "npm run build",
-    "publish": "npm publish --access public --provenance",
+    "release": "npm run build && npm publish",
+    "publish:dry-run": "npm run build && npm publish --dry-run",
     "install:latest-types": "rm -rf node_modules package-lock.json && npm install",
     "prepublishOnly": "npm run build"
   },
