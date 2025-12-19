@@ -50,6 +50,205 @@ const logger = {
 }
 
 /**
+ * Position-based move matcher result
+ */
+interface PositionMatchResult {
+  matched: boolean
+  originId: string | null
+  matchStrategy: 'id' | 'position' | 'none'
+  expectedDie?: number
+  matchedDie?: number
+}
+
+/**
+ * Match a GNU hint step to a READY move using position-based matching
+ *
+ * This is the canonical matcher that compares:
+ * - Origin position (from player's perspective)
+ * - Destination position (from player's perspective)
+ * - Move kind (point-to-point, reenter, bear-off)
+ * - Die value (when applicable)
+ *
+ * ID matching is used as a fast path but position matching is the canonical gate.
+ */
+const matchStepToReadyMove = (
+  step: MoveStep,
+  readyMoves: any[],
+  direction: BackgammonMoveDirection,
+  mappedOriginId: string | null
+): PositionMatchResult => {
+  const plannedFrom = step.from
+  const plannedTo = step.to
+  const plannedKind = step.moveKind
+
+  // Calculate expected die from the step
+  let stepExpectedDie: number | undefined
+  if (plannedKind === 'point-to-point' && typeof plannedFrom === 'number' && typeof plannedTo === 'number') {
+    stepExpectedDie = Math.abs(plannedFrom - plannedTo)
+  } else if (plannedKind === 'reenter' && typeof plannedTo === 'number') {
+    // For reentry: GNU's to=24 means die=1, to=19 means die=6
+    // The formula is: die = 25 - destination_position
+    stepExpectedDie = 25 - plannedTo
+  } else if (plannedKind === 'bear-off' && typeof plannedFrom === 'number') {
+    stepExpectedDie = plannedFrom
+  }
+
+  // Fast path: try ID match first
+  if (mappedOriginId) {
+    for (const m of readyMoves) {
+      if (!Array.isArray(m.possibleMoves)) continue
+      // dieValue can be on the move object or on possibleMove
+      const moveDie = (m as any)?.dieValue
+      for (const pm of m.possibleMoves) {
+        if (pm?.origin?.id === mappedOriginId) {
+          // Also verify die value matches to ensure we use the correct die
+          const pmDie = pm?.dieValue ?? moveDie
+          if (stepExpectedDie !== undefined && typeof pmDie === 'number' && pmDie !== stepExpectedDie) {
+            // ID matches but die value doesn't - try to find another possibleMove with correct die
+            continue
+          }
+          return {
+            matched: true,
+            originId: mappedOriginId,
+            matchStrategy: 'id',
+            expectedDie: stepExpectedDie,
+            matchedDie: pmDie,
+          }
+        }
+      }
+    }
+  }
+
+  // Canonical path: position-based matching
+  for (const m of readyMoves) {
+    if (!Array.isArray(m.possibleMoves)) continue
+    // dieValue can be on the move object or on possibleMove
+    const moveDie = (m as any)?.dieValue
+    for (const pm of m.possibleMoves) {
+      const org = pm?.origin
+      const dst = pm?.destination
+      if (!org || !dst) continue
+      const pmDie = pm?.dieValue ?? moveDie
+
+      // Reenter: origin must be bar, destination position must match
+      if (plannedKind === 'reenter' && org.kind === 'bar') {
+        if (typeof plannedTo === 'number') {
+          const dpos = dst?.position?.[direction]
+          if (typeof dpos === 'number' && dpos === plannedTo) {
+            // Die value check: for reentry, die = 25 - destination (e.g., to=24 means die=1)
+            if (typeof pmDie === 'number' && pmDie !== stepExpectedDie) {
+              continue
+            }
+            return {
+              matched: true,
+              originId: org.id,
+              matchStrategy: 'position',
+              expectedDie: stepExpectedDie,
+              matchedDie: pmDie,
+            }
+          }
+        } else {
+          // No specific destination required, just match bar origin
+          return {
+            matched: true,
+            originId: org.id,
+            matchStrategy: 'position',
+            expectedDie: stepExpectedDie,
+            matchedDie: pmDie,
+          }
+        }
+      }
+
+      // Bear-off: destination must be off, origin position must match
+      if (plannedKind === 'bear-off' && dst?.kind === 'off') {
+        if (typeof plannedFrom === 'number') {
+          const opos = org?.position?.[direction]
+          if (typeof opos === 'number' && opos === plannedFrom) {
+            // For bear-off, die value must be >= position (can use higher die when no higher checkers)
+            if (typeof pmDie === 'number' && stepExpectedDie !== undefined && pmDie < stepExpectedDie) {
+              continue
+            }
+            return {
+              matched: true,
+              originId: org.id,
+              matchStrategy: 'position',
+              expectedDie: stepExpectedDie,
+              matchedDie: pmDie,
+            }
+          }
+        }
+      }
+
+      // Point-to-point: both origin and destination positions must match
+      if (plannedKind === 'point-to-point') {
+        const opos = org?.position?.[direction]
+        const dpos = dst?.position?.[direction]
+        if (
+          typeof plannedFrom === 'number' &&
+          typeof plannedTo === 'number' &&
+          typeof opos === 'number' &&
+          typeof dpos === 'number' &&
+          opos === plannedFrom &&
+          dpos === plannedTo
+        ) {
+          // Die value must match exactly for point-to-point
+          if (typeof pmDie === 'number' && pmDie !== stepExpectedDie) {
+            continue
+          }
+          return {
+            matched: true,
+            originId: org.id,
+            matchStrategy: 'position',
+            expectedDie: stepExpectedDie,
+            matchedDie: pmDie,
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    matched: false,
+    originId: null,
+    matchStrategy: 'none',
+  }
+}
+
+/**
+ * Find the best matching hint from a list of hints
+ *
+ * Iterates through hints (rank 1 to K) and returns the first one
+ * where the first step can be matched to a READY move.
+ */
+const findMatchingHint = (
+  hints: Array<{ moves: MoveStep[] }>,
+  readyMoves: any[],
+  direction: BackgammonMoveDirection,
+  game: BackgammonGameMoving
+): { hint: { moves: MoveStep[] } | null; hintRank: number; matchResult: PositionMatchResult | null } => {
+  for (let rank = 0; rank < hints.length; rank++) {
+    const hint = hints[rank]
+    if (!hint?.moves || hint.moves.length === 0) continue
+
+    const firstStep = hint.moves[0]
+    let mappedOriginId: string | null = null
+
+    try {
+      const { origin } = getCheckercontainersForGnuStep(firstStep, game)
+      mappedOriginId = origin?.id ?? null
+    } catch {
+      mappedOriginId = null
+    }
+
+    const matchResult = matchStepToReadyMove(firstStep, readyMoves, direction, mappedOriginId)
+    if (matchResult.matched) {
+      return { hint, hintRank: rank + 1, matchResult }
+    }
+  }
+  return { hint: null, hintRank: 0, matchResult: null }
+}
+
+/**
  * Convert GNU Backgammon move step to Nodots checker containers
  *
  * Maps GNU's position notation to Nodots' checker container system,
@@ -171,12 +370,47 @@ export const executeRobotTurnWithGNU = async (
     rollSource = 'ready-derived'
   }
 
+  // DIAGNOSTIC: Log game state before accessing gnuPositionId
+  console.log('[AI:DIAGNOSTIC] Game state at position ID generation:', {
+    gameId: workingGame.id,
+    stateKind: workingGame.stateKind,
+    activeColor: workingGame.activeColor,
+    activePlayerColor: (workingGame.activePlayer as any)?.color,
+    activePlayerDirection: (workingGame.activePlayer as any)?.direction,
+    activePlayerIsRobot: (workingGame.activePlayer as any)?.isRobot,
+    inactivePlayerColor: (workingGame.inactivePlayer as any)?.color,
+    inactivePlayerDirection: (workingGame.inactivePlayer as any)?.direction,
+    inactivePlayerIsRobot: (workingGame.inactivePlayer as any)?.isRobot,
+  })
+
   const planPositionId = workingGame.gnuPositionId
+
+  // DIAGNOSTIC: Log position ID
+  console.log('[AI:DIAGNOSTIC] Position ID generated:', {
+    positionId: planPositionId,
+    roll,
+    rollSource,
+  })
+
+  const playerDirection = (workingGame.activePlayer as any)?.direction || 'clockwise'
   let plan: MoveStep[] = []
+  let hintRankUsed = 0
+  let allHintsCount = 0
   try {
-    const hints = await GnuBgHints.getHintsFromPositionId(planPositionId, roll, 1)
-    const hint = hints && hints[0]
-    plan = hint?.moves || []
+    // Request 5 hints to allow fallthrough if top hint doesn't match READY moves
+    const hints = await GnuBgHints.getHintsFromPositionId(planPositionId, roll, 5)
+    allHintsCount = hints?.length || 0
+    // Find the first hint whose first step matches a READY move
+    const { hint, hintRank } = findMatchingHint(
+      hints || [],
+      startReady,
+      playerDirection,
+      workingGame
+    )
+    if (hint) {
+      plan = hint.moves || []
+      hintRankUsed = hintRank
+    }
   } catch {
     plan = []
   }
@@ -214,122 +448,74 @@ export const executeRobotTurnWithGNU = async (
       }
     }
 
-    // Validate planned origin
+    // Collect legal origin IDs for telemetry
     const legalOriginIds: string[] = []
-    const isPlanOriginLegal = mappedOriginId
-      ? ready.some(
-          (m) =>
-            Array.isArray(m.possibleMoves) &&
-            m.possibleMoves.some((pm: any) => {
-              const id = pm?.origin?.id
-              if (id) legalOriginIds.push(id)
-              return id === mappedOriginId
-            })
-        )
-      : false
+    for (const m of ready) {
+      if (!Array.isArray(m.possibleMoves)) continue
+      for (const pm of m.possibleMoves) {
+        const id = pm?.origin?.id
+        if (id && !legalOriginIds.includes(id)) legalOriginIds.push(id)
+      }
+    }
 
     let originIdToUse: string | null = null
     let usedFallback = false
     let fallbackReason: string | undefined
-    if (isPlanOriginLegal && mappedOriginId) {
-      originIdToUse = mappedOriginId
-    } else {
-      // Attempt position-based mapping before declaring fallback (origin+destination+kind match)
-      let posMatchedId: string | null = null
-      let expectedDie: number | undefined
-      let matchedDie: number | undefined
+    let matchStrategy: 'id' | 'position' | 'none' = 'none'
+
+    // Use the position-based matcher when we have a planned step
+    if (stepFromPlan) {
       const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
-      for (const m of ready) {
-        if (!Array.isArray(m.possibleMoves)) continue
-        for (const pm of m.possibleMoves) {
-          const org = pm?.origin
-          const dst = pm?.destination
-          if (!org || !dst) continue
-          // Planned reentry: origin must be bar; optional destination position check
-          if (plannedKind === 'reenter' && org.kind === 'bar') {
-            if (typeof plannedTo === 'number') {
-              const dpos = (dst as any)?.position?.[dir]
-              if (typeof dpos === 'number' && dpos === plannedTo) {
-                expectedDie = plannedTo
-                matchedDie = (pm as any)?.dieValue
-                if (typeof matchedDie === 'number' && matchedDie !== expectedDie) {
-                  continue
-                }
-                posMatchedId = org.id
-                break
-              }
-            } else {
-              posMatchedId = org.id
-              break
-            }
-          }
-          // Planned bear-off: destination must be off; check origin position
-          if (plannedKind === 'bear-off' && (dst as any)?.kind === 'off') {
-            if (typeof plannedFrom === 'number') {
-              const opos = (org as any)?.position?.[dir]
-              if (typeof opos === 'number' && opos === plannedFrom) {
-                // Expected die is typically plannedFrom; allow pm.dieValue >= plannedFrom (higher die allowed when no higher checkers)
-                expectedDie = plannedFrom
-                matchedDie = (pm as any)?.dieValue
-                if (typeof matchedDie === 'number' && matchedDie < expectedDie) {
-                  continue
-                }
-                posMatchedId = org.id
-                break
-              }
-            }
-          }
-          // Planned point-to-point: check both origin and destination positions
-          if (plannedKind === 'point-to-point') {
-            const opos = (org as any)?.position?.[dir]
-            const dpos = (dst as any)?.position?.[dir]
-            if (
-              typeof plannedFrom === 'number' &&
-              typeof plannedTo === 'number' &&
-              typeof opos === 'number' &&
-              typeof dpos === 'number' &&
-              opos === plannedFrom &&
-              dpos === plannedTo
-            ) {
-              // Expected die is absolute difference (relative to mover perspective)
-              expectedDie = Math.abs(plannedFrom - plannedTo)
-              matchedDie = (pm as any)?.dieValue
-              if (typeof matchedDie === 'number' && matchedDie !== expectedDie) {
-                continue
-              }
-              posMatchedId = org.id
-              break
-            }
-          }
+      const matchResult = matchStepToReadyMove(stepFromPlan, ready, dir, mappedOriginId)
+
+      // Debug: log READY move positions for mismatch diagnosis
+      const readyPositions = ready.map((m: any) => {
+        if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0) return null
+        const pm = m.possibleMoves[0]
+        return {
+          die: m.dieValue,
+          originPos: pm?.origin?.position?.[dir],
+          destPos: pm?.destination?.position?.[dir],
+          originId: pm?.origin?.id,
         }
-        if (posMatchedId) break
-      }
-      if (posMatchedId) {
-        // Position-based mapping succeeded; do not treat as override
-        originIdToUse = posMatchedId
-        // Update mapping telemetry fields to reflect position-based match
-        mappedOriginId = posMatchedId
-        // We intentionally do NOT set usedFallback/aiFallbackUsed here
+      }).filter(Boolean)
+      logger.debug('[AI] Step matching', {
+        planIdx,
+        planned: { from: plannedFrom, to: plannedTo, kind: plannedKind },
+        mappedOriginId,
+        readyPositions,
+        matchResult: { matched: matchResult.matched, strategy: matchResult.matchStrategy },
+      })
+
+      if (matchResult.matched && matchResult.originId) {
+        originIdToUse = matchResult.originId
+        matchStrategy = matchResult.matchStrategy
+        expectedDie = matchResult.expectedDie
+        matchedDie = matchResult.matchedDie
+        // Update mappedOriginId for telemetry if position-based match found a different ID
+        if (matchResult.matchStrategy === 'position') {
+          mappedOriginId = matchResult.originId
+        }
       } else {
-      // Fallback: planned step could not be matched by id or position+die
-      // Treat as CORE move mismatch when we had a planned step
-      aiFallbackUsed = true
-      usedFallback = true
-      fallbackReason = stepFromPlan ? 'core-move-mismatch' : 'no-gnu-hints-or-mapping-failed'
-      if (fallbackReason) fallbackReasons.push(fallbackReason)
-      try {
-        if (fallbackReason === 'core-move-mismatch') {
+        // Fallback: planned step could not be matched by id or position+die
+        aiFallbackUsed = true
+        usedFallback = true
+        fallbackReason = 'core-move-mismatch'
+        fallbackReasons.push(fallbackReason)
+        try {
           const diag = {
             ts: new Date().toISOString(),
             gameId: (workingGame as any)?.id,
             positionId,
             roll,
-            dir: (workingGame.activePlayer as any)?.direction || 'clockwise',
+            hintRankUsed,
+            allHintsCount,
+            dir,
             planned: { from: plannedFrom, to: plannedTo, kind: plannedKind },
             readyMovesSample: (ready as any[]).slice(0, 5).map((m: any) => {
               const pm = Array.isArray(m.possibleMoves) && m.possibleMoves[0]
-              const oPos = pm?.origin?.position?.[(workingGame.activePlayer as any)?.direction || 'clockwise']
-              const dPos = pm?.destination?.position?.[(workingGame.activePlayer as any)?.direction || 'clockwise']
+              const oPos = pm?.origin?.position?.[dir]
+              const dPos = pm?.destination?.position?.[dir]
               return { die: m?.dieValue, originPos: typeof oPos === 'number' ? oPos : null, destPos: typeof dPos === 'number' ? dPos : null, kind: m?.moveKind || pm?.moveKind }
             }),
           }
@@ -337,8 +523,26 @@ export const executeRobotTurnWithGNU = async (
           const outFile = path.join(outDir, 'core-mismatch.log')
           try { fs.mkdirSync(outDir, { recursive: true }) } catch {}
           fs.appendFile(outFile, JSON.stringify(diag) + '\n', () => {})
+        } catch {}
+        // Fallback heuristic: prioritize bear-off > hits > other moves
+        const prioritize = (m: any) => {
+          if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0)
+            return 3
+          const mk = m.moveKind || m.possibleMoves[0]?.moveKind
+          if (mk === 'bear-off') return 0
+          if (m.possibleMoves[0]?.isHit) return 1
+          return 2
         }
-      } catch {}
+        ready.sort((a, b) => prioritize(a) - prioritize(b))
+        originIdToUse = ready[0]?.possibleMoves?.[0]?.origin?.id ?? null
+      }
+    } else {
+      // No planned step available (GNU returned no matching hints)
+      aiFallbackUsed = true
+      usedFallback = true
+      fallbackReason = 'no-gnu-hints-or-mapping-failed'
+      fallbackReasons.push(fallbackReason)
+      // Fallback heuristic: prioritize bear-off > hits > other moves
       const prioritize = (m: any) => {
         if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0)
           return 3
@@ -349,7 +553,6 @@ export const executeRobotTurnWithGNU = async (
       }
       ready.sort((a, b) => prioritize(a) - prioritize(b))
       originIdToUse = ready[0]?.possibleMoves?.[0]?.origin?.id ?? null
-      }
     }
 
     if (!originIdToUse) {
@@ -379,7 +582,8 @@ export const executeRobotTurnWithGNU = async (
         planLength,
         planIndex: planIdx,
         planSource: 'turn-plan',
-        hintCount: planLength > 0 ? 1 : 0,
+        hintCount: allHintsCount,
+        hintRankUsed,
         mappedOriginId,
         usedFallback: true,
         fallbackReason: 'no-executable-origin',
@@ -388,7 +592,7 @@ export const executeRobotTurnWithGNU = async (
         plannedTo,
         plannedKind,
         legalOriginIds,
-        mappingStrategy: mappedOriginId ? 'id' : 'none',
+        mappingStrategy: matchStrategy,
         mappingOutcome: 'no-legal',
         activeDirection: dirSnap,
         barCount: barCnt,
@@ -425,10 +629,11 @@ export const executeRobotTurnWithGNU = async (
       workingGame,
       originIdToUse
     )
-    // Build CORE legality snapshot for telemetry
+    // Build CORE legality snapshot for telemetry - use the CURRENT ready state (before execution)
     const dirSnap2 = (workingGame.activePlayer as any)?.direction || 'clockwise'
     const barCnt2 = ((workingGame.board as any)?.bar?.[dirSnap2]?.checkers || []).length
     const offCnt2 = ((workingGame.board as any)?.off?.[dirSnap2]?.checkers || []).length
+    // Sample the ready moves that were available at decision time (before this step executed)
     const sample2: any[] = []
     for (const m of ready as any[]) {
       if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0) continue
@@ -449,7 +654,8 @@ export const executeRobotTurnWithGNU = async (
       planLength,
       planIndex: planIdx,
       planSource: 'turn-plan',
-      hintCount: planLength > 0 ? 1 : 0,
+      hintCount: allHintsCount,
+      hintRankUsed,
       mappedOriginId,
       usedFallback,
       fallbackReason,
@@ -458,14 +664,12 @@ export const executeRobotTurnWithGNU = async (
       plannedTo,
       plannedKind,
       legalOriginIds,
-      mappingStrategy: mappedOriginId
-        ? (isPlanOriginLegal ? 'id' : (originIdToUse && originIdToUse === mappedOriginId ? 'position' : 'rehint'))
-        : 'none',
+      mappingStrategy: matchStrategy,
       mappingOutcome: usedFallback
         ? (mappedOriginId ? 'id-miss' : 'no-origin')
-        : (mappedOriginId ? ((isPlanOriginLegal || (originIdToUse && originIdToUse === mappedOriginId)) ? 'ok' : 'ok-rehint') : 'no-origin'),
-      expectedDie: expectedDie as any,
-      matchedDie: matchedDie as any,
+        : (matchStrategy !== 'none' ? 'ok' : 'no-origin'),
+      expectedDie: expectedDie as number | undefined,
+      matchedDie: matchedDie as number | undefined,
       activeDirection: dirSnap2,
       barCount: barCnt2,
       offCount: offCnt2,
@@ -482,7 +686,9 @@ export const executeRobotTurnWithGNU = async (
       postState: workingGame.stateKind,
     })
 
-    if (!usedFallback && stepFromPlan) {
+    // Always increment planIdx when there was a planned step, even if fallback was used.
+    // This prevents the loop from retrying the same stale plan step after the board changes.
+    if (stepFromPlan) {
       planIdx += 1
     }
     if (workingGame.stateKind === 'completed') break
@@ -524,3 +730,6 @@ export const executeRobotTurnWithGNU = async (
   }
   return result
 }
+
+// Export matching functions for testing
+export { matchStepToReadyMove, findMatchingHint, PositionMatchResult }
