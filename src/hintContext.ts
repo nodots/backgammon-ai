@@ -198,9 +198,13 @@ export function buildHintContextFromPlay(
   const normalization = deriveNormalizationFromPlay(play);
   const board = normalizeBoardForHints(play.board, normalization.toGnu);
 
+  // The active player is the one on roll - normalize their color
+  const normalizedActiveColor: GnubgColor = normalization.toGnu[play.player.color] ?? play.player.color;
+
   const request: HintRequest = {
     board,
     dice: deriveDiceFromPlay(play),
+    activePlayerColor: normalizedActiveColor,
     cubeValue: 1,
     cubeOwner: null,
     matchScore: [0, 0],
@@ -220,9 +224,17 @@ export function buildHintContextFromGame(
   const normalization = deriveNormalizationFromGame(game);
   const normalizedBoard = normalizeBoardForHints(game.board, normalization.toGnu);
 
+  // Normalize the active player's color to match the normalized board
+  // This is critical - gnubg-hints needs to know who is on roll in the NORMALIZED color space
+  const activeColor = game.activePlayer?.color;
+  const normalizedActiveColor: GnubgColor = activeColor
+    ? (normalization.toGnu[activeColor] ?? activeColor)
+    : 'white';
+
   const request = createHintRequestFromGame(game, {
     ...overrides,
     board: normalizedBoard,
+    activePlayerColor: normalizedActiveColor,
     cubeOwner:
       overrides.cubeOwner ??
       normalizeCubeOwner(game.cube?.owner?.color, normalization.toGnu),
