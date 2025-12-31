@@ -1,6 +1,6 @@
 {
   "name": "@nodots-llc/backgammon-ai",
-  "version": "4.6.4-staging.0",
+  "version": "4.6.4-staging.1",
   "description": "AI and integration for nodots-backgammon using the @nodots-llc/gnubg-hints native addon.",
   "type": "module",
   "main": "dist/index.js",
@@ -31,9 +31,9 @@
     "url": "https://github.com/nodots/nodots-backgammon-ai/issues"
   },
   "scripts": {
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "update-coverage": "node scripts/update-coverage.js",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
@@ -58,7 +58,7 @@
   "dependencies": {
     "@nodots-llc/backgammon-types": "file:../types",
     "@nodots-llc/backgammon-core": "file:../core",
-    "@nodots-llc/gnubg-hints": "^4.6.2",
+    "@nodots-llc/gnubg-hints": "file:../gnubg-hints/gnubg-node-addon",
     "@types/socket.io-client": "^1.4.36",
     "socket.io-client": "^4.8.1"
   },
@@ -75,6 +75,6 @@
     "typescript": "^5.7.3"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20 <21"
   }
 }

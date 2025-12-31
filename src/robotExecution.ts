@@ -9,45 +9,70 @@
 import {
   BackgammonGameMoving,
   BackgammonGameRolling,
+  BackgammonGame,
   BackgammonMoveDestination,
   BackgammonMoveDirection,
   BackgammonMoveOrigin,
-  BackgammonRoll,
   BackgammonDieValue,
+  BackgammonBoard,
+  BackgammonPlayMoving,
+  BackgammonPlayerMoving,
+  BackgammonMoveCompletedWithMove,
+  BackgammonMoveSkeleton,
 } from '@nodots-llc/backgammon-types'
-import type { OverrideInfo, OverrideReason, AITelemetryStep } from '@nodots-llc/backgammon-types'
-import { GnuBgHints, MoveStep } from '@nodots-llc/gnubg-hints'
-import fs from 'fs'
-import path from 'path'
+import type { MoveStep } from '@nodots-llc/gnubg-hints'
+import { buildHintContextFromGame } from './hintContext.js'
+import { gnubgHints } from './gnubg.js'
+import { logger as coreLogger, generateId } from '@nodots-llc/backgammon-core'
 
 // Lazy imports to break circular dependency (ESM-compatible)
 let Core: any = null
-let Board: any = null
 const getCore = async () => {
   if (!Core) {
     Core = await import('@nodots-llc/backgammon-core')
   }
   return Core
 }
-const getBoard = async () => {
-  if (!Board) {
-    const core = await getCore()
-    Board = core.Board
-  }
-  return Board
-}
 
-// Simple logger to avoid circular dependency issues
+// Use shared logger while keeping AI prefixing for clarity.
+const withAiPrefix = (msg: string) =>
+  msg.startsWith('[AI]') ? msg : `[AI] ${msg}`
 const logger = {
   debug: (msg: string, ...args: any[]) =>
-    console.log(`[AI] [DEBUG] ${msg}`, ...args),
+    coreLogger.debug(withAiPrefix(msg), ...args),
   info: (msg: string, ...args: any[]) =>
-    console.log(`[AI] [INFO] ${msg}`, ...args),
+    coreLogger.info(withAiPrefix(msg), ...args),
   warn: (msg: string, ...args: any[]) =>
-    console.warn(`[AI] [WARN] ${msg}`, ...args),
+    coreLogger.warn(withAiPrefix(msg), ...args),
   error: (msg: string, ...args: any[]) =>
-    console.error(`[AI] [ERROR] ${msg}`, ...args),
+    coreLogger.error(withAiPrefix(msg), ...args),
 }
+
+const toMovesArray = (moves: any): any[] =>
+  Array.isArray(moves) ? moves : moves ? Array.from(moves) : []
+
+const summarizeReadyMoves = (game: BackgammonGameMoving): any[] => {
+  const direction = (game.activePlayer as any)?.direction
+  return toMovesArray((game as any).activePlay?.moves)
+    .filter((m) => m.stateKind === 'ready')
+    .slice(0, 10)
+    .map((m) => {
+      const pm = Array.isArray(m.possibleMoves) ? m.possibleMoves[0] : undefined
+      return {
+        dieValue: m.dieValue,
+        moveKind: m.moveKind,
+        originPos: pm?.origin?.position?.[direction] ?? null,
+        destPos: pm?.destination?.position?.[direction] ?? null,
+      }
+    })
+}
+
+const formatStepSummary = (step: MoveStep) => ({
+  from: step.from,
+  to: step.to,
+  kind: step.moveKind,
+  player: step.player,
+})
 
 /**
  * Position-based move matcher result
@@ -55,6 +80,7 @@ const logger = {
 interface PositionMatchResult {
   matched: boolean
   originId: string | null
+  matchedDestinationId?: string | null // CORE's destination when different from GNU's
   matchStrategy: 'id' | 'position' | 'none'
   expectedDie?: number
   matchedDie?: number
@@ -130,32 +156,19 @@ const matchStepToReadyMove = (
       if (!org || !dst) continue
       const pmDie = pm?.dieValue ?? moveDie
 
-      // Reenter: origin must be bar, destination position must match
+      // Reenter: origin must be bar, die value must match exactly
+      // GNU is authoritative - if die doesn't match, it's a bug to fix
       if (plannedKind === 'reenter' && org.kind === 'bar') {
-        if (typeof plannedTo === 'number') {
-          const dpos = dst?.position?.[direction]
-          if (typeof dpos === 'number' && dpos === plannedTo) {
-            // Die value check: for reentry, die = 25 - destination (e.g., to=24 means die=1)
-            if (typeof pmDie === 'number' && pmDie !== stepExpectedDie) {
-              continue
-            }
-            return {
-              matched: true,
-              originId: org.id,
-              matchStrategy: 'position',
-              expectedDie: stepExpectedDie,
-              matchedDie: pmDie,
-            }
-          }
-        } else {
-          // No specific destination required, just match bar origin
-          return {
-            matched: true,
-            originId: org.id,
-            matchStrategy: 'position',
-            expectedDie: stepExpectedDie,
-            matchedDie: pmDie,
-          }
+        // Die value must match exactly for reentry (same as point-to-point)
+        if (typeof pmDie === 'number' && pmDie !== stepExpectedDie) {
+          continue
+        }
+        return {
+          matched: true,
+          originId: org.id,
+          matchStrategy: 'position',
+          expectedDie: stepExpectedDie,
+          matchedDie: pmDie,
         }
       }
 
@@ -261,6 +274,7 @@ const getCheckercontainersForGnuStep = (
   origin: BackgammonMoveOrigin
   destination: BackgammonMoveDestination
   direction: BackgammonMoveDirection
+  expectedDieValue?: BackgammonDieValue
 } => {
   const { activePlayer, board } = game
   const gnuTo = move.to
@@ -317,7 +331,210 @@ const getCheckercontainersForGnuStep = (
     origin,
     destination
   )
-  return { origin, destination, direction }
+  const expectedDieValue = (() => {
+    if (gnuMoveKind === 'point-to-point' && typeof gnuFrom === 'number' && typeof gnuTo === 'number') {
+      return Math.abs(gnuFrom - gnuTo) as BackgammonDieValue
+    }
+    if (gnuMoveKind === 'reenter' && typeof gnuTo === 'number') {
+      return (25 - gnuTo) as BackgammonDieValue
+    }
+    if (gnuMoveKind === 'bear-off' && typeof gnuFrom === 'number') {
+      return gnuFrom as BackgammonDieValue
+    }
+    return undefined
+  })()
+  return { origin, destination, direction, expectedDieValue }
+}
+
+/**
+ * Detect if a move will result in a hit (blot on destination)
+ */
+const detectHit = (
+  destination: BackgammonMoveDestination,
+  activePlayer: BackgammonPlayerMoving
+): boolean => {
+  // Off and bar are never hits
+  if ((destination as any).kind === 'off' || (destination as any).kind === 'bar') {
+    return false
+  }
+  const checkers = (destination as any).checkers || []
+  // Hit = exactly one opponent checker
+  return checkers.length === 1 && checkers[0]?.color !== activePlayer.color
+}
+
+/**
+ * Calculate die value from a GNU step
+ */
+const calculateDieValue = (step: MoveStep): BackgammonDieValue => {
+  if (step.moveKind === 'point-to-point' && typeof step.from === 'number' && typeof step.to === 'number') {
+    return Math.abs(step.from - step.to) as BackgammonDieValue
+  }
+  if (step.moveKind === 'reenter' && typeof step.to === 'number') {
+    // For reentry: destination position = 25 - die, so die = 25 - destination
+    return (25 - step.to) as BackgammonDieValue
+  }
+  if (step.moveKind === 'bear-off' && typeof step.from === 'number') {
+    return step.from as BackgammonDieValue
+  }
+  throw new Error(`Cannot calculate die value for step: ${JSON.stringify(step)}`)
+}
+
+/**
+ * Determine move kind from origin container
+ */
+const determineMoveKind = (
+  origin: BackgammonMoveOrigin,
+  destination: BackgammonMoveDestination
+): 'point-to-point' | 'bear-off' | 'reenter' => {
+  if ((origin as any).kind === 'bar') return 'reenter'
+  if ((destination as any).kind === 'off') return 'bear-off'
+  return 'point-to-point'
+}
+
+/**
+ * Find an available die that can make a bear-off move from the given position.
+ * For bear-off: exact die match, OR higher die if no checkers on higher points.
+ */
+const findAvailableDieForBearOff = (
+  game: BackgammonGameMoving,
+  fromPosition: number
+): BackgammonDieValue | undefined => {
+  const activePlay = (game as any).activePlay
+  const moves = toMovesArray(activePlay?.moves || [])
+  const direction = game.activePlayer.direction
+
+  // Get available (ready) dice
+  const availableDice = moves
+    .filter((m: any) => m.stateKind === 'ready')
+    .map((m: any) => m.dieValue as BackgammonDieValue)
+
+  // First try exact match
+  if (availableDice.includes(fromPosition as BackgammonDieValue)) {
+    return fromPosition as BackgammonDieValue
+  }
+
+  // For higher dice, check if no checkers exist on higher points
+  const playerPoints = game.board.points.filter(
+    (p: any) => p.checkers?.length > 0 && p.checkers[0]?.color === game.activePlayer.color
+  )
+  const highestCheckerPosition = Math.max(
+    ...playerPoints.map((p: any) => p.position[direction] as number)
+  )
+
+  // If this is the highest checker, any die >= position can bear it off
+  if (fromPosition >= highestCheckerPosition) {
+    const validDice = availableDice.filter((d) => d >= fromPosition)
+    if (validDice.length > 0) {
+      return validDice[0]
+    }
+  }
+
+  return undefined
+}
+
+const canAssignBearOffDice = (froms: number[], dice: number[]): boolean => {
+  if (froms.length === 0) return true
+  const sortedFroms = [...froms].sort((a, b) => b - a)
+  const sortedDice = [...dice].sort((a, b) => b - a)
+  for (const from of sortedFroms) {
+    const idx = sortedDice.findIndex((d) => d >= from)
+    if (idx === -1) return false
+    sortedDice.splice(idx, 1)
+  }
+  return true
+}
+
+const pickBearOffDie = (
+  fromPosition: number,
+  availableDice: BackgammonDieValue[],
+  remainingBearOffFroms: number[]
+): BackgammonDieValue => {
+  const candidates = availableDice
+    .filter((d) => d >= fromPosition)
+    .sort((a, b) => a - b)
+  for (const candidate of candidates) {
+    const remainingDice = [...availableDice]
+    const idx = remainingDice.indexOf(candidate)
+    if (idx !== -1) {
+      remainingDice.splice(idx, 1)
+    }
+    if (canAssignBearOffDice(remainingBearOffFroms, remainingDice)) {
+      return candidate
+    }
+  }
+  throw new Error(
+    `No available die for bear-off from position ${fromPosition} (dice=${JSON.stringify(
+      availableDice
+    )})`
+  )
+}
+
+/**
+ * Execute a GNU hint step directly using CORE's executeAndRecalculate.
+ * GNU is authoritative - we trust its move suggestions and derive origin/destination
+ * from GNU coordinates, then let CORE handle proper state transitions.
+ *
+ * @param game - Current game in moving state
+ * @param step - GNU hint step to execute
+ * @returns Updated game state after move execution
+ */
+const executeGnuStepDirectly = async (
+  game: BackgammonGameMoving,
+  step: MoveStep,
+  dieValueOverride?: BackgammonDieValue
+): Promise<BackgammonGameMoving> => {
+  const CoreUtil = await getCore()
+  const { activePlayer } = game
+  const direction = activePlayer.direction
+  const trace = process.env.NDBG_AI_TRACE === '1'
+
+  // 1. Resolve origin and destination from GNU coordinates
+  const { origin, destination } = getCheckercontainersForGnuStep(step, game)
+
+  // 2. Basic validation (optional - GNU is GOD)
+  const originCheckers = (origin as any).checkers || []
+  if (originCheckers.length === 0) {
+    throw new Error(`Direct execution: origin has no checkers (step=${JSON.stringify(formatStepSummary(step))})`)
+  }
+  if (originCheckers[0]?.color !== activePlayer.color) {
+    throw new Error(`Direct execution: origin checker color mismatch (step=${JSON.stringify(formatStepSummary(step))})`)
+  }
+
+  // 3. Calculate die value - special handling for bear-off
+  let dieValue: BackgammonDieValue
+  if (step.moveKind === 'bear-off' && typeof step.from === 'number') {
+    // For bear-off, prefer the caller-provided die assignment
+    if (dieValueOverride) {
+      dieValue = dieValueOverride
+    } else {
+      const availableDie = findAvailableDieForBearOff(game, step.from)
+      if (!availableDie) {
+        throw new Error(`No available die for bear-off from position ${step.from}`)
+      }
+      dieValue = availableDie
+    }
+  } else {
+    dieValue = calculateDieValue(step)
+  }
+
+  if (trace) {
+    logger.info('[AI][TRACE] Direct execution step', {
+      step: formatStepSummary(step),
+      dieValue,
+      originId: origin.id,
+      destinationId: destination.id,
+      direction,
+    })
+  }
+
+  // 4. Use CORE's executeAndRecalculate with GNU-derived origin/destination
+  // This ensures proper state transitions (turn changes, game completion, etc.)
+  const updatedGame = CoreUtil.Game.executeAndRecalculate(game, origin.id, {
+    desiredDestinationId: destination.id,
+    expectedDieValue: dieValue,
+  })
+
+  return updatedGame as BackgammonGameMoving
 }
 
 /**
@@ -338,398 +555,312 @@ const getCheckercontainersForGnuStep = (
 export const executeRobotTurnWithGNU = async (
   game: BackgammonGameMoving
 ): Promise<BackgammonGameRolling> => {
-  await GnuBgHints.initialize()
   const CoreUtil = await getCore()
+  const trace = process.env.NDBG_AI_TRACE === '1'
 
-  let workingGame: any = game
-  let aiFallbackUsed = false
-  const fallbackReasons: string[] = []
-  const telemetry: AITelemetryStep[] = []
-  let guard = 8 // prevent infinite loops per turn
-
-  // One-shot plan: ask GNU once for the full sequence and execute without re-asking mid-turn
-  const startMoves = (workingGame.activePlay?.moves || []) as any[]
-  const startReady = startMoves.filter((m) => m.stateKind === 'ready')
-  const playerRoll = (workingGame.activePlayer as any)?.dice?.currentRoll as
-    | BackgammonRoll
+  const roll = (game.activePlayer as any)?.dice?.currentRoll as
+    | [BackgammonDieValue, BackgammonDieValue]
     | undefined
-  let roll: BackgammonRoll
-  let rollSource: 'player-currentRoll' | 'ready-derived' = 'ready-derived'
-  if (Array.isArray(playerRoll) && playerRoll.length === 2) {
-    const d1 = (playerRoll[0] ?? 1) as BackgammonDieValue
-    const d2 = (playerRoll[1] ?? 1) as BackgammonDieValue
-    roll = [d1, d2]
-    rollSource = 'player-currentRoll'
-  } else {
-    const d1 = (startReady[0]?.dieValue ?? 1) as BackgammonDieValue
-    const d2 = (
-      startReady[1]?.dieValue ??
-      (startReady.length > 1 ? startReady[1]?.dieValue ?? d1 : d1)
-    ) as BackgammonDieValue
-    roll = [d1, d2]
-    rollSource = 'ready-derived'
+  if (!Array.isArray(roll) || roll.length !== 2) {
+    throw new Error('Robot turn requires an active player roll')
   }
 
-  // DIAGNOSTIC: Log game state before accessing gnuPositionId
-  console.log('[AI:DIAGNOSTIC] Game state at position ID generation:', {
-    gameId: workingGame.id,
-    stateKind: workingGame.stateKind,
-    activeColor: workingGame.activeColor,
-    activePlayerColor: (workingGame.activePlayer as any)?.color,
-    activePlayerDirection: (workingGame.activePlayer as any)?.direction,
-    activePlayerIsRobot: (workingGame.activePlayer as any)?.isRobot,
-    inactivePlayerColor: (workingGame.inactivePlayer as any)?.color,
-    inactivePlayerDirection: (workingGame.inactivePlayer as any)?.direction,
-    inactivePlayerIsRobot: (workingGame.inactivePlayer as any)?.isRobot,
-  })
+  const ctx = buildHintContextFromGame(game as any, { dice: roll })
+  const hintDirection = ctx.request.activePlayerDirection
+  const hintColor = ctx.request.activePlayerColor
+  const computedNeedsMirror = hintDirection !== 'clockwise'
 
-  const planPositionId = workingGame.gnuPositionId
+  if (trace) {
+    // DIAGNOSTIC: Dump board state being sent to GNU
+    const boardPoints = game.board.points
+      .filter((p: any) => p.checkers?.length > 0)
+      .map((p: any) => ({
+        cwPos: p.position?.clockwise,
+        ccwPos: p.position?.counterclockwise,
+        checkers: p.checkers?.length,
+        color: p.checkers?.[0]?.color,
+      }))
 
-  // DIAGNOSTIC: Log position ID
-  console.log('[AI:DIAGNOSTIC] Position ID generated:', {
-    positionId: planPositionId,
-    roll,
-    rollSource,
-  })
-
-  const playerDirection = (workingGame.activePlayer as any)?.direction || 'clockwise'
-  let plan: MoveStep[] = []
-  let hintRankUsed = 0
-  let allHintsCount = 0
-  try {
-    // Request 5 hints to allow fallthrough if top hint doesn't match READY moves
-    const hints = await GnuBgHints.getHintsFromPositionId(planPositionId, roll, 5)
-    allHintsCount = hints?.length || 0
-    // Find the first hint whose first step matches a READY move
-    const { hint, hintRank } = findMatchingHint(
-      hints || [],
-      startReady,
-      playerDirection,
-      workingGame
-    )
-    if (hint) {
-      plan = hint.moves || []
-      hintRankUsed = hintRank
-    }
-  } catch {
-    plan = []
+    logger.info('[AI][TRACE] requesting GNU hints', {
+      gameId: (game as any)?.id,
+      roll,
+      activeColor: hintColor,
+      direction: hintDirection,
+      needsMirror: computedNeedsMirror,
+      boardSnapshot: boardPoints,
+    })
   }
-  let planIdx = 0
-  const planLength = plan.length
+  let hints = await gnubgHints.getMoveHints(ctx.request as any, 5)
 
-  while (guard-- > 0 && workingGame.stateKind === 'moving') {
-    const moves = (workingGame.activePlay?.moves || []) as any[]
-    const ready = moves.filter((m) => m.stateKind === 'ready')
+  // DIAGNOSTIC: Log the converted hint positions
+  if (trace && hints && hints.length > 0) {
+    const firstHint = hints[0]
+    logger.info('[AI][TRACE] GNU hints received (post-conversion)', {
+      hintCount: hints.length,
+      rank1Steps: firstHint?.moves?.map((m: MoveStep) => ({
+        from: m.from,
+        to: m.to,
+        kind: m.moveKind,
+        player: m.player,
+      })),
+      normalizationUsed: {
+        activePlayerDirection: hintDirection,
+        activePlayerColor: hintColor,
+        needsMirror: computedNeedsMirror,
+      },
+    })
+  }
 
-    // If no READY moves remain, let core decide turn completion
-    if (ready.length === 0) {
-      workingGame = CoreUtil.Game.checkAndCompleteTurn(workingGame)
-      break
-    }
+  if (!hints || hints.length === 0) {
+    // Output ASCII board for debugging
+    const CoreMod = await getCore()
+    const asciiBoard = CoreMod?.ascii
+      ? CoreMod.ascii(game.board, game.players, game.activePlayer)
+      : '[ASCII board unavailable]'
+    console.log('\n=== NO HINTS ASCII BOARD ===')
+    console.log(asciiBoard)
+    console.log(`Roll: [${roll}]`)
+    console.log('GNU returned 0 hints for this position')
+    console.log('============================\n')
+    throw new Error('GNU Backgammon returned no hints for the current position')
+  }
 
-    // Next planned step (if any)
-    const positionId = workingGame.gnuPositionId
-    let mappedOriginId: string | null = null
-    let plannedFrom: number | null = null
-    let plannedTo: number | null = null
-    let plannedKind: string | undefined
-    let expectedDie: number | undefined
-    let matchedDie: number | undefined
-    const stepFromPlan = planIdx < planLength ? plan[planIdx] : undefined
-    if (stepFromPlan) {
-      plannedFrom = (stepFromPlan as any).from ?? null
-      plannedTo = (stepFromPlan as any).to ?? null
-      plannedKind = (stepFromPlan as any).moveKind
-      try {
-        const { origin } = getCheckercontainersForGnuStep(stepFromPlan, workingGame)
-        mappedOriginId = origin?.id ?? null
-      } catch {
-        mappedOriginId = null
-      }
-    }
+  const plan = hints[0]?.moves || []
+  if (trace) {
+    logger.info('[AI][TRACE] hint plan selected', {
+      hintRank: 1,
+      planLength: plan.length,
+      plan: plan.map(formatStepSummary),
+    })
+  }
+  if (!plan.length) {
+    throw new Error('GNU Backgammon returned an empty move sequence')
+  }
 
-    // Collect legal origin IDs for telemetry
-    const legalOriginIds: string[] = []
-    for (const m of ready) {
-      if (!Array.isArray(m.possibleMoves)) continue
-      for (const pm of m.possibleMoves) {
-        const id = pm?.origin?.id
-        if (id && !legalOriginIds.includes(id)) legalOriginIds.push(id)
-      }
-    }
+  // Direct execution: execute GNU steps directly without matching to pre-computed moves
+  // GNU is authoritative - we trust its move suggestions
+  let workingGame: BackgammonGameMoving = game
+  let availableDice = toMovesArray((workingGame as any).activePlay?.moves)
+    .filter((m) => m.stateKind === 'ready')
+    .map((m) => m.dieValue as BackgammonDieValue)
 
-    let originIdToUse: string | null = null
-    let usedFallback = false
-    let fallbackReason: string | undefined
-    let matchStrategy: 'id' | 'position' | 'none' = 'none'
+  // Telemetry collection for PR calculation
+  // GNU uses numeric positions: 1-24 for points, 0 for bar/off
+  const telemetry: Array<{
+    plannedFrom: number
+    plannedTo: number
+    plannedKind: string
+    matchedDie: number
+  }> = []
 
-    // Use the position-based matcher when we have a planned step
-    if (stepFromPlan) {
-      const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
-      const matchResult = matchStepToReadyMove(stepFromPlan, ready, dir, mappedOriginId)
+  for (let stepIndex = 0; stepIndex < plan.length; stepIndex++) {
+    const step = plan[stepIndex]
+    const remainingBearOffFroms = plan
+      .slice(stepIndex + 1)
+      .filter((s) => s.moveKind === 'bear-off' && typeof s.from === 'number')
+      .map((s) => s.from as number)
 
-      // Debug: log READY move positions for mismatch diagnosis
-      const readyPositions = ready.map((m: any) => {
-        if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0) return null
-        const pm = m.possibleMoves[0]
-        return {
-          die: m.dieValue,
-          originPos: pm?.origin?.position?.[dir],
-          destPos: pm?.destination?.position?.[dir],
-          originId: pm?.origin?.id,
-        }
-      }).filter(Boolean)
-      logger.debug('[AI] Step matching', {
-        planIdx,
-        planned: { from: plannedFrom, to: plannedTo, kind: plannedKind },
-        mappedOriginId,
-        readyPositions,
-        matchResult: { matched: matchResult.matched, strategy: matchResult.matchStrategy },
-      })
-
-      if (matchResult.matched && matchResult.originId) {
-        originIdToUse = matchResult.originId
-        matchStrategy = matchResult.matchStrategy
-        expectedDie = matchResult.expectedDie
-        matchedDie = matchResult.matchedDie
-        // Update mappedOriginId for telemetry if position-based match found a different ID
-        if (matchResult.matchStrategy === 'position') {
-          mappedOriginId = matchResult.originId
-        }
-      } else {
-        // Fallback: planned step could not be matched by id or position+die
-        aiFallbackUsed = true
-        usedFallback = true
-        fallbackReason = 'core-move-mismatch'
-        fallbackReasons.push(fallbackReason)
-        try {
-          const diag = {
-            ts: new Date().toISOString(),
-            gameId: (workingGame as any)?.id,
-            positionId,
-            roll,
-            hintRankUsed,
-            allHintsCount,
-            dir,
-            planned: { from: plannedFrom, to: plannedTo, kind: plannedKind },
-            readyMovesSample: (ready as any[]).slice(0, 5).map((m: any) => {
-              const pm = Array.isArray(m.possibleMoves) && m.possibleMoves[0]
-              const oPos = pm?.origin?.position?.[dir]
-              const dPos = pm?.destination?.position?.[dir]
-              return { die: m?.dieValue, originPos: typeof oPos === 'number' ? oPos : null, destPos: typeof dPos === 'number' ? dPos : null, kind: m?.moveKind || pm?.moveKind }
-            }),
-          }
-          const outDir = path.join(process.cwd(), 'scripts', 'diagnostics')
-          const outFile = path.join(outDir, 'core-mismatch.log')
-          try { fs.mkdirSync(outDir, { recursive: true }) } catch {}
-          fs.appendFile(outFile, JSON.stringify(diag) + '\n', () => {})
-        } catch {}
-        // Fallback heuristic: prioritize bear-off > hits > other moves
-        const prioritize = (m: any) => {
-          if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0)
-            return 3
-          const mk = m.moveKind || m.possibleMoves[0]?.moveKind
-          if (mk === 'bear-off') return 0
-          if (m.possibleMoves[0]?.isHit) return 1
-          return 2
-        }
-        ready.sort((a, b) => prioritize(a) - prioritize(b))
-        originIdToUse = ready[0]?.possibleMoves?.[0]?.origin?.id ?? null
-      }
+    let dieValue: BackgammonDieValue
+    if (step.moveKind === 'bear-off' && typeof step.from === 'number') {
+      dieValue = pickBearOffDie(
+        step.from,
+        availableDice,
+        remainingBearOffFroms
+      )
     } else {
-      // No planned step available (GNU returned no matching hints)
-      aiFallbackUsed = true
-      usedFallback = true
-      fallbackReason = 'no-gnu-hints-or-mapping-failed'
-      fallbackReasons.push(fallbackReason)
-      // Fallback heuristic: prioritize bear-off > hits > other moves
-      const prioritize = (m: any) => {
-        if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0)
-          return 3
-        const mk = m.moveKind || m.possibleMoves[0]?.moveKind
-        if (mk === 'bear-off') return 0
-        if (m.possibleMoves[0]?.isHit) return 1
-        return 2
+      dieValue = calculateDieValue(step)
+      if (!availableDice.includes(dieValue)) {
+        throw new Error(
+          `GNU step requires die ${dieValue} but it is not available (dice=${JSON.stringify(
+            availableDice
+          )})`
+        )
       }
-      ready.sort((a, b) => prioritize(a) - prioritize(b))
-      originIdToUse = ready[0]?.possibleMoves?.[0]?.origin?.id ?? null
     }
 
-    if (!originIdToUse) {
-      // Nothing executable — ask core to complete the turn if possible
-      workingGame = CoreUtil.Game.checkAndCompleteTurn(workingGame)
-      // Build CORE legality snapshot
-      const dirSnap = (workingGame.activePlayer as any)?.direction || 'clockwise'
-      const barCnt = ((workingGame.board as any)?.bar?.[dirSnap]?.checkers || []).length
-      const offCnt = ((workingGame.board as any)?.off?.[dirSnap]?.checkers || []).length
-      const sample: any[] = []
-      for (const m of ready as any[]) {
-        if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0) continue
-        const pm = m.possibleMoves[0]
-        const o = pm?.origin
-        const d = pm?.destination
-        const oPos = o?.position ? (o.position as any)[dirSnap] : null
-        const dPos = d?.position ? (d.position as any)[dirSnap] : null
-        sample.push({ die: (m as any)?.dieValue, originPos: typeof oPos === 'number' ? oPos : null, destPos: typeof dPos === 'number' ? dPos : null, kind: (m as any)?.moveKind || (pm as any)?.moveKind })
-        if (sample.length >= 5) break
+    if (trace) {
+      logger.info(`[AI][TRACE] Executing step ${stepIndex + 1}/${plan.length}`, {
+        step: formatStepSummary(step),
+        direction: workingGame.activePlayer?.direction,
+        dieValue,
+      })
+    }
+
+    try {
+      workingGame = await executeGnuStepDirectly(workingGame, step, dieValue)
+      const usedIndex = availableDice.indexOf(dieValue)
+      if (usedIndex !== -1) {
+        availableDice.splice(usedIndex, 1)
       }
+
+      // Record telemetry for PR calculation
+      // GNU uses numeric positions: 1-24 for points, 0 for bar/off
       telemetry.push({
-        step: 8 - guard,
-        positionId,
-        roll,
-        rollSource,
-        singleDieRemaining: ready.length === 1,
-        planLength,
-        planIndex: planIdx,
-        planSource: 'turn-plan',
-        hintCount: allHintsCount,
-        hintRankUsed,
-        mappedOriginId,
-        usedFallback: true,
-        fallbackReason: 'no-executable-origin',
-        postState: workingGame.stateKind,
-        plannedFrom,
-        plannedTo,
-        plannedKind,
-        legalOriginIds,
-        mappingStrategy: matchStrategy,
-        mappingOutcome: 'no-legal',
-        activeDirection: dirSnap,
-        barCount: barCnt,
-        offCount: offCnt,
-        readyMovesSample: sample,
+        plannedFrom: step.from,
+        plannedTo: step.to,
+        plannedKind: step.moveKind,
+        matchedDie: dieValue,
       })
-      logger.info('[AI] Fallback completion: no executable origin', {
-        positionId,
-        roll,
-        planLength,
-        planIndex: planIdx,
-        postState: workingGame.stateKind,
-      })
+    } catch (error) {
+      // Output diagnostic information on failure
+      const CoreMod = await getCore()
+      const gnuPositionId =
+        typeof CoreMod?.exportToGnuPositionId === 'function'
+          ? CoreMod.exportToGnuPositionId(workingGame as any)
+          : 'unknown'
+      const asciiBoard = CoreMod?.ascii
+        ? CoreMod.ascii(workingGame.board, workingGame.players, workingGame.activePlayer)
+        : '[ASCII board unavailable]'
+      console.log('\n=== DIRECT EXECUTION FAILURE ===')
+      console.log(asciiBoard)
+      console.log(`Roll: [${roll}]`)
+      console.log(`Step ${stepIndex + 1}/${plan.length}: ${step.moveKind} from ${step.from} to ${step.to}`)
+      console.log(`Error: ${String(error)}`)
+      console.log('================================\n')
+
+      throw new Error(
+        `GNU direct execution failed (gnu_position_id=${gnuPositionId}, roll=${roll}, step=${JSON.stringify(
+          formatStepSummary(step)
+        )}): ${String(error)}`
+      )
+    }
+
+    // Check if game completed (all checkers borne off)
+    if ((workingGame as any).stateKind === 'completed') {
       break
     }
 
-    // Ensure dice order consumes the intended die first (avoid CORE picking the other die)
-    try {
-      const cr = ((workingGame.activePlayer as any)?.dice?.currentRoll || []) as number[]
-      if (
-        typeof expectedDie === 'number' &&
-        Array.isArray(cr) &&
-        cr.length === 2 &&
-        cr[0] !== cr[1] &&
-        cr[1] === expectedDie &&
-        cr[0] !== expectedDie
-      ) {
-        workingGame = CoreUtil.Game.switchDice(workingGame as any) as any
-      }
-    } catch {}
-
-    // Execute via core to ensure correctness and win checks
-    workingGame = CoreUtil.Game.executeAndRecalculate(
-      workingGame,
-      originIdToUse
+    // Check if all moves are completed for this turn
+    const remainingReady = toMovesArray((workingGame as any).activePlay?.moves).filter(
+      (m) => m.stateKind === 'ready'
     )
-    // Build CORE legality snapshot for telemetry - use the CURRENT ready state (before execution)
-    const dirSnap2 = (workingGame.activePlayer as any)?.direction || 'clockwise'
-    const barCnt2 = ((workingGame.board as any)?.bar?.[dirSnap2]?.checkers || []).length
-    const offCnt2 = ((workingGame.board as any)?.off?.[dirSnap2]?.checkers || []).length
-    // Sample the ready moves that were available at decision time (before this step executed)
-    const sample2: any[] = []
-    for (const m of ready as any[]) {
-      if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0) continue
-      const pm = m.possibleMoves[0]
-      const o = pm?.origin
-      const d = pm?.destination
-      const oPos = o?.position ? (o.position as any)[dirSnap2] : null
-      const dPos = d?.position ? (d.position as any)[dirSnap2] : null
-      sample2.push({ die: (m as any)?.dieValue, originPos: typeof oPos === 'number' ? oPos : null, destPos: typeof dPos === 'number' ? dPos : null, kind: (m as any)?.moveKind || (pm as any)?.moveKind })
-      if (sample2.length >= 5) break
+    if (remainingReady.length === 0) {
+      break
     }
-    telemetry.push({
-      step: 8 - guard,
-      positionId,
-      roll,
-      rollSource,
-      singleDieRemaining: ready.length === 1,
-      planLength,
-      planIndex: planIdx,
-      planSource: 'turn-plan',
-      hintCount: allHintsCount,
-      hintRankUsed,
-      mappedOriginId,
-      usedFallback,
-      fallbackReason,
-      postState: workingGame.stateKind,
-      plannedFrom,
-      plannedTo,
-      plannedKind,
-      legalOriginIds,
-      mappingStrategy: matchStrategy,
-      mappingOutcome: usedFallback
-        ? (mappedOriginId ? 'id-miss' : 'no-origin')
-        : (matchStrategy !== 'none' ? 'ok' : 'no-origin'),
-      expectedDie: expectedDie as number | undefined,
-      matchedDie: matchedDie as number | undefined,
-      activeDirection: dirSnap2,
-      barCount: barCnt2,
-      offCount: offCnt2,
-      readyMovesSample: sample2,
-    })
-    logger.info('[AI] Step executed (turn-plan)', {
-      positionId,
-      roll,
-      planLength,
-      planIndex: planIdx,
-      mappedOriginId,
-      usedFallback,
-      fallbackReason,
-      postState: workingGame.stateKind,
-    })
-
-    // Always increment planIdx when there was a planned step, even if fallback was used.
-    // This prevents the loop from retrying the same stale plan step after the board changes.
-    if (stepFromPlan) {
-      planIdx += 1
-    }
-    if (workingGame.stateKind === 'completed') break
   }
 
-  const result: BackgammonGameRolling = workingGame as BackgammonGameRolling
-  if (aiFallbackUsed || fallbackReasons.length > 0) {
-    const primaryReason = (fallbackReasons[0] || 'unknown') as OverrideReason
-    const info: OverrideInfo = {
-      reasonCode: primaryReason,
-      reasonText:
-        primaryReason === 'plan-origin-not-legal'
-          ? 'Planned origin not legal under current READY set'
-          : primaryReason === 'core-move-mismatch'
-          ? 'GNU planned step not present in CORE READY set (position/kind/die)'
-          : primaryReason === 'mapping-failed'
-          ? 'Failed to map GNU step to Nodots containers'
-          : primaryReason === 'no-gnu-hints' || primaryReason === 'no-gnu-hints-or-mapping-failed'
-          ? 'GNU returned no hints or mapping failed'
-          : 'AI fallback was used',
-    }
-    Object.defineProperty(result as any, '__aiFallback', {
-      value: info,
-      enumerable: false,
-      configurable: true,
-    })
+  // Final guard: no READY moves should remain; if they do, throw to surface the failure
+  workingGame = finalizeNoMoveTurn(workingGame as any, CoreUtil) as any
+
+  try {
+    assertNoReadyMoves(workingGame)
+  } catch (error) {
+    const gnuPositionId =
+      typeof CoreUtil?.Board?.exportToGnuPositionId === 'function'
+        ? CoreUtil.Board.exportToGnuPositionId(workingGame as any)
+        : 'unknown'
+    throw new Error(
+      `GNU turn left READY moves (gnu_position_id=${gnuPositionId}, roll=${roll}): ${String(
+        error
+      )}`
+    )
   }
-  Object.defineProperty(result as any, '__aiTelemetry', {
-    value: telemetry,
-    enumerable: false,
-    configurable: true,
-  })
-  if (fallbackReasons.length > 0) {
-    Object.defineProperty(result as any, '__aiFallbackReasons', {
-      value: fallbackReasons,
-      enumerable: false,
-      configurable: true,
-    })
-  }
-  return result
+
+  // After all moves completed, game transitions to 'rolling' state for next player
+  // Attach telemetry for PR calculation before returning
+  // Type assertion: __aiTelemetry is a diagnostic property not part of the formal type
+  ;(workingGame as any).__aiTelemetry = telemetry
+
+  // Type assertion through unknown required because stateKind changes from 'moving' to 'rolling'
+  return workingGame as unknown as BackgammonGameRolling
 }
 
 // Export matching functions for testing
 export { matchStepToReadyMove, findMatchingHint, PositionMatchResult }
+
+/**
+ * Guard: ensure no READY moves remain after robot execution.
+ * Throws if any READY moves are present (indicating the robot left playable dice).
+ */
+export function assertNoReadyMoves(game: any): void {
+  const moves = toMovesArray(game?.activePlay?.moves)
+  const ready = moves.filter((m) => m.stateKind === 'ready')
+  if (ready.length > 0) {
+    const dice = (game.activePlayer as any)?.dice?.currentRoll
+    const samples = ready.slice(0, 5).map((m) => {
+      const pm = Array.isArray(m.possibleMoves) ? m.possibleMoves[0] : undefined
+      return {
+        die: m.dieValue,
+        moveKind: m.moveKind,
+        originPos:
+          pm?.origin?.position?.[(game.activePlayer as any)?.direction] ?? null,
+        destPos:
+          pm?.destination?.position?.[
+            (game.activePlayer as any)?.direction
+          ] ?? null,
+      }
+    })
+    throw new Error(
+      `Robot turn finished with READY moves remaining (dice=${dice}): ${JSON.stringify(
+        samples
+      )}`
+    )
+  }
+}
+
+/**
+ * If remaining dice have no legal moves, convert them to completed no-move
+ * and advance the turn for robot execution.
+ */
+function finalizeNoMoveTurn(
+  game: BackgammonGame,
+  CoreUtil: any
+): BackgammonGame {
+  if (game.stateKind !== 'moving') {
+    return game
+  }
+
+  const activePlay = (game as any).activePlay
+  if (!activePlay?.moves) {
+    return game
+  }
+
+  const moves = toMovesArray(activePlay.moves)
+  const readyMoves = moves.filter((m) => m.stateKind === 'ready')
+  if (readyMoves.length === 0) {
+    return game
+  }
+
+  const hasLegalMove = readyMoves.some((move) => {
+    const possible = CoreUtil.Board.getPossibleMoves(
+      game.board,
+      game.activePlayer,
+      move.dieValue as BackgammonDieValue
+    ) as BackgammonMoveSkeleton[]
+    return Array.isArray(possible) && possible.length > 0
+  })
+
+  if (hasLegalMove) {
+    return game
+  }
+
+  const updatedMoves = moves.map((move) => {
+    if (move.stateKind !== 'ready') {
+      return move
+    }
+    return {
+      ...move,
+      stateKind: 'completed',
+      moveKind: 'no-move',
+      possibleMoves: [],
+      origin: undefined,
+      destination: undefined,
+      isHit: false,
+    }
+  })
+
+  const updatedGame = {
+    ...game,
+    activePlay: {
+      ...activePlay,
+      moves: updatedMoves,
+    },
+  }
+
+  const checked = CoreUtil.Game.checkAndCompleteTurn(updatedGame as any)
+  if (checked.stateKind === 'moved' && checked.activePlayer?.isRobot) {
+    return CoreUtil.Game.confirmTurn(checked as any)
+  }
+
+  return checked
+}

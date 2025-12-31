@@ -5,14 +5,38 @@ import type {
   BackgammonPoint,
   BackgammonPoints,
 } from '@nodots-llc/backgammon-types';
-import { selectBestMove } from '../moveSelection';
+import { jest } from '@jest/globals';
 import type { MoveHint } from '@nodots-llc/gnubg-hints';
 
-jest.mock('@nodots-llc/gnubg-hints');
+let mockHints: MoveHint[] = []
+const initializeMock = jest.fn().mockResolvedValue(undefined)
+const getMoveHintsMock = jest.fn(async () => mockHints)
 
-const { __setMockHints } = jest.requireMock('@nodots-llc/gnubg-hints') as {
-  __setMockHints: (hints: MoveHint[]) => void;
-};
+jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
+  GnuBgHints: {
+    initialize: initializeMock,
+    configure: jest.fn(),
+    getMoveHints: getMoveHintsMock,
+    getDoubleHint: jest.fn(),
+    getTakeHint: jest.fn(),
+    shutdown: jest.fn(),
+  },
+  createHintRequestFromGame: () => ({
+    board: { points: [], bar: {}, off: {} },
+    dice: [0, 0],
+    activePlayerColor: 'white',
+    activePlayerDirection: 'clockwise',
+    cubeValue: 1,
+    cubeOwner: null,
+    matchScore: [0, 0],
+    matchLength: 0,
+    crawford: false,
+    jacoby: false,
+    beavers: false,
+  }),
+}))
+
+const { selectBestMove } = await import('../moveSelection.js')
 
 describe('selectBestMove with GNU hints', () => {
   function createTestPlay(): BackgammonPlayMoving {
@@ -113,7 +137,7 @@ describe('selectBestMove with GNU hints', () => {
   it('selects the move suggested by the highest ranked hint', async () => {
     const play = createTestPlay();
 
-    __setMockHints([
+    mockHints = [
       {
         rank: 1,
         difference: 0,
@@ -139,7 +163,7 @@ describe('selectBestMove with GNU hints', () => {
           },
         ],
       },
-    ]);
+    ];
 
     const result = await selectBestMove(play, 'gbg-bot');
     expect(result?.id).toBe('move-1');

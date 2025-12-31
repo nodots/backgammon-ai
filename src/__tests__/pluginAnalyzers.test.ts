@@ -1,12 +1,24 @@
 import path from 'path'
+import { jest } from '@jest/globals'
 import type { MoveHint } from '@nodots-llc/gnubg-hints'
-import { loadAnalyzersFromPluginsDir } from '../pluginLoader'
+import { fileURLToPath } from 'url'
 
-jest.mock('@nodots-llc/gnubg-hints')
+let mockHints: MoveHint[] = []
+const initializeMock = jest.fn().mockResolvedValue(undefined)
+const getMoveHintsMock = jest.fn(async () => mockHints)
 
-const { __setMockHints } = jest.requireMock('@nodots-llc/gnubg-hints') as {
-  __setMockHints: (hints: MoveHint[]) => void;
-};
+jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
+  GnuBgHints: {
+    initialize: initializeMock,
+    configure: jest.fn(),
+    getMoveHints: getMoveHintsMock,
+    getDoubleHint: jest.fn(),
+    getTakeHint: jest.fn(),
+    shutdown: jest.fn(),
+  },
+}))
+
+const { loadAnalyzersFromPluginsDir } = await import('../pluginLoader.js')
 
 interface TestMove {
   id: string
@@ -18,8 +30,9 @@ interface TestMove {
 }
 
 describe('Plugin Analyzers', () => {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url))
   const pluginsDir = path.join(__dirname, '../../plugins')
-  const analyzers = loadAnalyzersFromPluginsDir(pluginsDir)
+  let analyzers: Record<string, any> = {}
 
   const moves: TestMove[] = [
     {
@@ -48,8 +61,13 @@ describe('Plugin Analyzers', () => {
     },
   ]
 
+  beforeAll(async () => {
+    analyzers = await loadAnalyzersFromPluginsDir(pluginsDir)
+  })
+
   beforeEach(() => {
-    __setMockHints([])
+    mockHints = []
+    getMoveHintsMock.mockClear()
   })
 
   it('randomMoveAnalyzer returns one of the moves', async () => {
