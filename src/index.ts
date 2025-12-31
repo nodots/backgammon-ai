@@ -6,6 +6,7 @@ import type {
   MoveHint,
   TakeHint,
 } from '@nodots-llc/gnubg-hints';
+import { MoveFilterSetting } from '@nodots-llc/gnubg-hints';
 import { gnubgHints, GnubgHintsIntegration } from './gnubg.js';
 import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers.js';
 
@@ -21,11 +22,26 @@ export async function registerAIProvider(): Promise<void> {
   const { GNUAIProvider } = await import('./GNUAIProvider.js');
 
   RobotAIRegistry.register(new GNUAIProvider());
+  // Initialize and configure GNU hints once so execution and analysis share identical settings
+  try {
+    await initializeGnubgHints({
+      config: DEFAULT_HINTS_CONFIG,
+    });
+  } catch (err) {
+    // Non-fatal: consumers may initialize separately; log for visibility
+    console.warn('[AI] gnubg-hints init/config skipped:', String(err));
+  }
   registered = true;
 }
 
 export type { DoubleHint, HintConfig, HintRequest, MoveHint, TakeHint };
 export { gnubgHints, GnubgHintsIntegration };
+// Default shared configuration used by robots and PR analysis
+export const DEFAULT_HINTS_CONFIG: Partial<HintConfig> = {
+  evalPlies: 2,
+  moveFilter: MoveFilterSetting.Large,
+  usePruning: true,
+};
 
 export async function initializeGnubgHints(options?: {
   weightsPath?: string;

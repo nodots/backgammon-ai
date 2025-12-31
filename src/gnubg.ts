@@ -106,6 +106,34 @@ export class GnubgHintsIntegration {
     return addon.getMoveHints(request, maxHints);
   }
 
+  // Prefer positionId path when available to mirror robot integration
+  async getHintsFromPositionId(
+    positionId: string,
+    dice: [number, number],
+    maxHints?: number,
+  ): Promise<MoveHint[]> {
+    const addon = await this.ensureInitialized();
+    if (typeof addon.getHintsFromPositionId === 'function') {
+      return addon.getHintsFromPositionId(positionId, dice, maxHints);
+    }
+    // Fallback: synthesize a minimal request (less preferred path)
+    const request: HintRequest = {
+      // The addon will ignore board in this path; provide empty structure
+      board: { id: 'unknown', points: [], bar: {} as any, off: {} as any } as any,
+      dice,
+      activePlayerColor: 'white',
+      activePlayerDirection: 'clockwise',
+      cubeValue: 1,
+      cubeOwner: null,
+      matchScore: [0, 0],
+      matchLength: 0,
+      crawford: false,
+      jacoby: false,
+      beavers: false,
+    };
+    return addon.getMoveHints(request, maxHints);
+  }
+
   async getBestMove(
     request: HintRequest,
     maxHints = 1

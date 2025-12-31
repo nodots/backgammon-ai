@@ -7,11 +7,11 @@ import type {
   BackgammonPlayMoving,
   BackgammonMoveReady,
   BackgammonCheckerContainer,
+  BackgammonMoveDirection,
 } from '@nodots-llc/backgammon-types';
 import type { MoveHint, MoveStep } from '@nodots-llc/gnubg-hints';
 import {
   buildHintContextFromPlay,
-  GnubgColorNormalization,
   getContainerKind,
   getNormalizedPosition,
 } from './hintContext.js';
@@ -33,13 +33,16 @@ async function tryLoadPolicyModel() {
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { logger as coreLogger } from '@nodots-llc/backgammon-core';
 
-// Simple logger to avoid circular dependency with core
+// Use shared logger while keeping AI prefixing for clarity.
+const withAiPrefix = (msg: string) =>
+  msg.startsWith('[AI]') ? msg : `[AI] ${msg}`
 const logger = {
-  info: (msg: string) => console.log(`[AI] [INFO] ${msg}`),
-  warn: (msg: string) => console.warn(`[AI] [WARN] ${msg}`),
-  error: (msg: string) => console.error(`[AI] [ERROR] ${msg}`),
-  debug: (msg: string) => console.log(`[AI] [DEBUG] ${msg}`)
+  info: (msg: string) => coreLogger.info(withAiPrefix(msg)),
+  warn: (msg: string) => coreLogger.warn(withAiPrefix(msg)),
+  error: (msg: string) => coreLogger.error(withAiPrefix(msg)),
+  debug: (msg: string) => coreLogger.debug(withAiPrefix(msg)),
 }
 
 /**
@@ -53,11 +56,14 @@ export async function selectBestMove(
   play: BackgammonPlayMoving,
   playerNickname?: string
 ): Promise<BackgammonMoveReady | undefined> {
-  if (!play.moves || play.moves.length === 0) return undefined
+  const movesArray = Array.isArray(play.moves)
+    ? play.moves
+    : Array.from(play.moves ?? [])
+  if (movesArray.length === 0) return undefined
 
-  const readyMoves = play.moves.filter(
-    (move) => move.stateKind === 'ready'
-  ) as BackgammonMoveReady[]
+  const readyMoves = (movesArray as BackgammonMoveReady[]).filter(
+    (move): move is BackgammonMoveReady => move.stateKind === 'ready'
+  )
   
   if (readyMoves.length === 0) return undefined
 
@@ -100,7 +106,7 @@ export async function selectBestMove(
     }
 
     try {
-      const { request, normalization } = buildHintContextFromPlay(play);
+      const { request } = buildHintContextFromPlay(play);
       logger.debug(
         `[AI] ${robotName} requesting structured hints from @nodots-llc/gnubg-hints`,
       );
@@ -110,12 +116,7 @@ export async function selectBestMove(
         throw new Error('No move hints returned by @nodots-llc/gnubg-hints');
       }
 
-      const matched = findMoveMatchingHints(
-        readyMoves,
-        hints,
-        normalization,
-        robotName,
-      );
+      const matched = findMoveMatchingHints(readyMoves, hints, robotName);
 
       if (matched) {
         const { move, hint } = matched;
@@ -125,9 +126,18 @@ export async function selectBestMove(
         ;(move as any).__source = 'gnu-hint'
         return move;
       }
-
-      logger.warn(
-        `[AI] ${robotName} Structured hints received but none matched available moves; falling back to heuristics`,
+      const hintSummary = hints
+        .slice(0, 3)
+        .map((hint) =>
+          (hint.moves || [])
+            .map((step) => `${step.from}:${step.to}:${step.fromContainer}->${step.toContainer}`)
+            .join(',')
+        )
+        .filter(Boolean);
+      throw new Error(
+        `GNU Backgammon hints did not match any legal moves for ${robotName} (hintSample=${JSON.stringify(
+          hintSummary
+        )})`,
       );
     } catch (error) {
       logger.error(
@@ -229,9 +239,12 @@ function getOpeningBookMove(
       const firstPossibleMove = move.possibleMoves[0]
       if (firstPossibleMove.origin && firstPossibleMove.destination) {
         // Normalize to mover perspective so openings match symmetrically
-        const normalizedColor = (move.player as any).direction === 'clockwise' ? 'white' : 'black'
-        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, normalizedColor as any)
-        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, normalizedColor as any)
+        const direction = move.player?.direction as BackgammonMoveDirection | undefined
+        if (!direction) {
+          continue
+        }
+        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, direction)
+        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, direction)
 
         if (originPos === 24 && destPos === 13 && preferredMove === '24/13') {
           logger.info(`[AI] ${robotName} Opening Book: Lover's Leap (24/13) for dice [${die1},${die2}]`)
@@ -264,10 +277,13 @@ function getBestStrategicMove(
       const firstPossibleMove = move.possibleMoves[0]
       if (firstPossibleMove.origin && firstPossibleMove.destination) {
         // Normalize positions to the moving player's perspective so that
-        // advancing always corresponds to decreasing index (white perspective)
-        const normalizedColor = (move.player as any).direction === 'clockwise' ? 'white' : 'black'
-        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, normalizedColor as any)
-        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, normalizedColor as any)
+        // advancing always corresponds to decreasing index in directional coords
+        const direction = move.player?.direction as BackgammonMoveDirection | undefined
+        if (!direction) {
+          continue
+        }
+        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, direction)
+        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, direction)
 
         if (originPos !== null && destPos !== null) {
           const distance = originPos - destPos // Positive means advancing in normalized coordinates
@@ -327,7 +343,7 @@ interface NormalizedMoveStep {
 
 function normalizeMoveSkeleton(
   move: BackgammonMoveReady,
-  normalizedColor: 'white' | 'black',
+  direction: BackgammonMoveDirection,
 ): NormalizedMoveStep[] {
   if (!move.possibleMoves || move.possibleMoves.length === 0) {
     return [];
@@ -336,8 +352,8 @@ function normalizeMoveSkeleton(
   const steps: NormalizedMoveStep[] = [];
 
   for (const possibleMove of move.possibleMoves) {
-    const from = getNormalizedPosition(possibleMove.origin, normalizedColor);
-    const to = getNormalizedPosition(possibleMove.destination, normalizedColor);
+    const from = getNormalizedPosition(possibleMove.origin, direction);
+    const to = getNormalizedPosition(possibleMove.destination, direction);
 
     if (from === null || to === null) {
       continue;
@@ -366,7 +382,6 @@ function stepsMatch(hintStep: MoveStep, moveStep: NormalizedMoveStep): boolean {
 function findMoveMatchingHints(
   readyMoves: BackgammonMoveReady[],
   hints: MoveHint[],
-  normalization: GnubgColorNormalization,
   robotName: string,
 ): { move: BackgammonMoveReady; hint: MoveHint } | undefined {
   for (const hint of hints) {
@@ -376,12 +391,12 @@ function findMoveMatchingHints(
     }
 
     for (const move of readyMoves) {
-      const normalizedColor = normalization.toGnu[move.player.color];
-      if (!normalizedColor) {
+      const direction = move.player?.direction as BackgammonMoveDirection | undefined;
+      if (!direction) {
         continue;
       }
 
-      const normalizedSteps = normalizeMoveSkeleton(move, normalizedColor);
+      const normalizedSteps = normalizeMoveSkeleton(move, direction);
       const matchingStep = normalizedSteps.find((step) =>
         stepsMatch(targetStep, step),
       );
