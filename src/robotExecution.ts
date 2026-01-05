@@ -7,6 +7,7 @@
  */
 
 import {
+  BackgammonColor,
   BackgammonGameMoving,
   BackgammonGameRolling,
   BackgammonMoveDestination,
@@ -21,10 +22,12 @@ import { GnuBgHints, MoveStep } from '@nodots-llc/gnubg-hints'
 import type { HintConfig } from '@nodots-llc/gnubg-hints'
 import fs from 'fs'
 import path from 'path'
+import { logger as coreLogger } from '@nodots-llc/backgammon-core'
 
 // Lazy imports to break circular dependency (ESM-compatible)
 let Core: any = null
 let Board: any = null
+let exportToGnuPositionIdFn: any = null
 const getCore = async () => {
   if (!Core) {
     Core = await import('@nodots-llc/backgammon-core')
@@ -38,17 +41,26 @@ const getBoard = async () => {
   }
   return Board
 }
+const getExportToGnuPositionId = async () => {
+  if (!exportToGnuPositionIdFn) {
+    const core = await getCore()
+    exportToGnuPositionIdFn = core.exportToGnuPositionId
+  }
+  return exportToGnuPositionIdFn
+}
 
 // Simple logger to avoid circular dependency issues
+const withAiPrefix = (msg: string) =>
+  msg.startsWith('[AI]') ? msg : `[AI] ${msg}`
 const logger = {
   debug: (msg: string, ...args: any[]) =>
-    console.log(`[AI] [DEBUG] ${msg}`, ...args),
+    coreLogger.debug(withAiPrefix(msg), ...args),
   info: (msg: string, ...args: any[]) =>
-    console.log(`[AI] [INFO] ${msg}`, ...args),
+    coreLogger.info(withAiPrefix(msg), ...args),
   warn: (msg: string, ...args: any[]) =>
-    console.warn(`[AI] [WARN] ${msg}`, ...args),
+    coreLogger.warn(withAiPrefix(msg), ...args),
   error: (msg: string, ...args: any[]) =>
-    console.error(`[AI] [ERROR] ${msg}`, ...args),
+    coreLogger.error(withAiPrefix(msg), ...args),
 }
 
 /**
@@ -173,61 +185,63 @@ export const executeRobotTurnWithGNU = async (
   const CoreUtil = await getCore()
 
   let workingGame: any = game
-  let aiFallbackUsed = false
-  const fallbackReasons: string[] = []
   const telemetry: AITelemetryStep[] = []
   let guard = 8 // prevent infinite loops per turn
 
   // One-shot plan: ask GNU once for the full sequence and execute without re-asking mid-turn
   const startMoves = (workingGame.activePlay?.moves || []) as any[]
   const startReady = startMoves.filter((m) => m.stateKind === 'ready')
-  const playerRoll = (workingGame.activePlayer as any)?.dice?.currentRoll as
-    | BackgammonRoll
-    | undefined
   let roll: BackgammonRoll
-  let rollSource: 'player-currentRoll' | 'ready-derived' = 'ready-derived'
-  if (Array.isArray(playerRoll) && playerRoll.length === 2) {
-    const d1 = (playerRoll[0] ?? 1) as BackgammonDieValue
-    const d2 = (playerRoll[1] ?? 1) as BackgammonDieValue
-    roll = [d1, d2]
-    rollSource = 'player-currentRoll'
-  } else {
-    const d1 = (startReady[0]?.dieValue ?? 1) as BackgammonDieValue
-    const d2 = (
-      startReady[1]?.dieValue ??
-      (startReady.length > 1 ? startReady[1]?.dieValue ?? d1 : d1)
-    ) as BackgammonDieValue
-    roll = [d1, d2]
-    rollSource = 'ready-derived'
-  }
+  let rollSource: 'ready-derived' = 'ready-derived'
+  const d1 = (startReady[0]?.dieValue ?? 1) as BackgammonDieValue
+  const d2 = (startReady[1]?.dieValue ?? d1) as BackgammonDieValue
+  roll = [d1, d2]
 
-  const planPositionId = workingGame.gnuPositionId
-  let plan: MoveStep[] = []
-  let selectedHintIndex = 0
-  try {
-    // Request more hints when noise is configured to allow non-optimal selection
+  const exportToGnuPositionId = await getExportToGnuPositionId()
+
+  const getPlanForGame = async (
+    currentGame: BackgammonGameMoving,
+    currentRoll: BackgammonRoll
+  ): Promise<MoveStep[]> => {
+    let planPositionId: string | undefined
+    try {
+      planPositionId = exportToGnuPositionId(currentGame)
+    } catch (err) {
+      logger.warn('[AI] Failed to compute gnuPositionId:', err)
+      planPositionId = undefined
+    }
+    if (!planPositionId) {
+      throw new Error('[AI] No position ID available - cannot get GNU hints')
+    }
+
+    const activePlayerDirection =
+      ((currentGame.activePlayer as any)?.direction as BackgammonMoveDirection) ??
+      'clockwise'
+    const activePlayerColor =
+      ((currentGame.activePlayer as any)?.color as BackgammonColor) ?? 'white'
     const noiseLevel = skillConfig?.noise ?? 0
     const maxHints = noiseLevel > 0 ? 5 : 1
-    const hints = await GnuBgHints.getHintsFromPositionId(planPositionId, roll, maxHints)
-
-    // Apply noise: occasionally select a non-optimal hint
-    if (hints && hints.length > 0) {
-      if (noiseLevel > 0 && hints.length > 1 && Math.random() < noiseLevel) {
-        // Select from top hints (weighted toward better moves)
-        // Higher noise = more likely to pick worse moves
-        const maxIndex = Math.min(hints.length - 1, Math.floor(noiseLevel * 5) + 1)
-        selectedHintIndex = Math.floor(Math.random() * (maxIndex + 1))
-        logger.info('[AI] Noise applied: selected hint #%d of %d (noise: %s)',
-          selectedHintIndex + 1, hints.length, noiseLevel)
-      }
-      const hint = hints[selectedHintIndex]
-      plan = hint?.moves || []
+    const hints = await GnuBgHints.getHintsFromPositionId(
+      planPositionId,
+      currentRoll,
+      maxHints,
+      activePlayerDirection,
+      activePlayerColor
+    )
+    if (!hints || hints.length === 0) {
+      return []
     }
-  } catch {
-    plan = []
+
+    let selectedHintIndex = 0
+    if (noiseLevel > 0 && hints.length > 1 && Math.random() < noiseLevel) {
+      const maxIndex = Math.min(hints.length - 1, Math.floor(noiseLevel * 5) + 1)
+      selectedHintIndex = Math.floor(Math.random() * (maxIndex + 1))
+      logger.info('[AI] Noise applied: selected hint #%d of %d (noise: %s)',
+        selectedHintIndex + 1, hints.length, noiseLevel)
+    }
+    const hint = hints[selectedHintIndex]
+    return hint?.moves || []
   }
-  let planIdx = 0
-  const planLength = plan.length
 
   while (guard-- > 0 && workingGame.stateKind === 'moving') {
     const moves = (workingGame.activePlay?.moves || []) as any[]
@@ -239,12 +253,31 @@ export const executeRobotTurnWithGNU = async (
       break
     }
 
+    // Refresh roll and plan per step to avoid stale sequences
+    if (ready.length > 0) {
+      const d1 = (ready[0]?.dieValue ?? 1) as BackgammonDieValue
+      const d2 = (ready[1]?.dieValue ?? d1) as BackgammonDieValue
+      roll = [d1, d2]
+      rollSource = 'ready-derived'
+    }
+
+    let plan: MoveStep[] = []
+    try {
+      plan = await getPlanForGame(workingGame, roll)
+    } catch (err) {
+      throw new Error(`[AI] Failed to get GNU hints: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    const planIdx = 0
+    const planLength = plan.length
+
     // Next planned step (if any)
     const positionId = workingGame.gnuPositionId
     let mappedOriginId: string | null = null
     let plannedFrom: number | null = null
     let plannedTo: number | null = null
     let plannedKind: string | undefined
+    let desiredDestinationId: string | null = null
+    let expectedDieValue: BackgammonDieValue | undefined
     let expectedDie: number | undefined
     let matchedDie: number | undefined
     const stepFromPlan = planIdx < planLength ? plan[planIdx] : undefined
@@ -275,15 +308,76 @@ export const executeRobotTurnWithGNU = async (
       : false
 
     let originIdToUse: string | null = null
-    let usedFallback = false
-    let fallbackReason: string | undefined
-    if (isPlanOriginLegal && mappedOriginId) {
-      originIdToUse = mappedOriginId
+    const barMoves = ready.filter(
+      (m) =>
+        Array.isArray(m.possibleMoves) &&
+        m.possibleMoves.some((pm: any) => pm?.origin?.kind === 'bar')
+    )
+    const activeDir =
+      (workingGame.activePlayer as any)?.direction || 'clockwise'
+    const activeColor = (workingGame.activePlayer as any)?.color
+    const barByDir =
+      ((workingGame.board as any)?.bar?.[activeDir]?.checkers || []).length
+    const barBothDirs =
+      ((workingGame.board as any)?.bar?.clockwise?.checkers || []).filter(
+        (c: any) => c?.color === activeColor
+      ).length +
+      ((workingGame.board as any)?.bar?.counterclockwise?.checkers || []).filter(
+        (c: any) => c?.color === activeColor
+      ).length
+    logger.debug('[AI] Bar-first check', {
+      barCount: barByDir,
+      barCountByColor: barBothDirs,
+      barMoves: barMoves.length,
+      readyMoves: ready.length,
+      plannedKind,
+    })
+    // ALWAYS use position-based matching that validates both origin AND destination.
+    // Simple origin ID matching is not sufficient because the same origin can have
+    // multiple destinations with different dice (e.g., from position 6: 6→5 with die 1, 6→2 with die 4).
+    if (barMoves.length > 0) {
+      // Bar-first rule: if any bar reentry is available, ignore non-bar GNU plans.
+      let barMatchedId: string | null = null
+      if (plannedKind === 'reenter') {
+        const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
+        for (const m of barMoves) {
+          if (!Array.isArray(m.possibleMoves)) continue
+          for (const pm of m.possibleMoves) {
+            if (pm?.origin?.kind !== 'bar') continue
+            const dpos = (pm as any)?.destination?.position?.[dir]
+            if (
+              typeof plannedTo === 'number' &&
+              typeof dpos === 'number' &&
+              dpos === plannedTo
+            ) {
+              barMatchedId = pm.origin.id
+              desiredDestinationId = pm?.destination?.id ?? null
+              expectedDieValue =
+                (pm as any)?.dieValue ?? (m as any)?.dieValue
+              break
+            }
+          }
+          if (barMatchedId) break
+        }
+      }
+      if (!barMatchedId) {
+        const firstBarMove = barMoves.find((m) =>
+          Array.isArray(m.possibleMoves)
+        )
+        const fallbackMove = firstBarMove?.possibleMoves?.[0]
+        barMatchedId = fallbackMove?.origin?.id ?? null
+        desiredDestinationId = fallbackMove?.destination?.id ?? null
+        expectedDieValue =
+          (fallbackMove as any)?.dieValue ?? (firstBarMove as any)?.dieValue
+      }
+      if (barMatchedId) {
+        originIdToUse = barMatchedId
+        mappedOriginId = barMatchedId
+      }
     } else {
-      // Attempt position-based mapping before declaring fallback (origin+destination+kind match)
+      {
+      // Attempt position-based mapping (origin+destination+kind match)
       let posMatchedId: string | null = null
-      let expectedDie: number | undefined
-      let matchedDie: number | undefined
       const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
       for (const m of ready) {
         if (!Array.isArray(m.possibleMoves)) continue
@@ -291,38 +385,26 @@ export const executeRobotTurnWithGNU = async (
           const org = pm?.origin
           const dst = pm?.destination
           if (!org || !dst) continue
-          // Planned reentry: origin must be bar; optional destination position check
+          // Planned reentry: origin must be bar; check destination position
           if (plannedKind === 'reenter' && org.kind === 'bar') {
-            if (typeof plannedTo === 'number') {
-              const dpos = (dst as any)?.position?.[dir]
-              if (typeof dpos === 'number' && dpos === plannedTo) {
-                expectedDie = plannedTo
-                matchedDie = (pm as any)?.dieValue
-                if (typeof matchedDie === 'number' && matchedDie !== expectedDie) {
-                  continue
-                }
-                posMatchedId = org.id
-                break
-              }
-            } else {
+            const dpos = (dst as any)?.position?.[dir]
+            if (typeof plannedTo === 'number' && typeof dpos === 'number' && dpos === plannedTo) {
               posMatchedId = org.id
+              desiredDestinationId = dst.id
+              expectedDieValue =
+                (pm as any)?.dieValue ?? (m as any)?.dieValue
               break
             }
           }
           // Planned bear-off: destination must be off; check origin position
           if (plannedKind === 'bear-off' && (dst as any)?.kind === 'off') {
-            if (typeof plannedFrom === 'number') {
-              const opos = (org as any)?.position?.[dir]
-              if (typeof opos === 'number' && opos === plannedFrom) {
-                // Expected die is typically plannedFrom; allow pm.dieValue >= plannedFrom (higher die allowed when no higher checkers)
-                expectedDie = plannedFrom
-                matchedDie = (pm as any)?.dieValue
-                if (typeof matchedDie === 'number' && matchedDie < expectedDie) {
-                  continue
-                }
-                posMatchedId = org.id
-                break
-              }
+            const opos = (org as any)?.position?.[dir]
+            if (typeof plannedFrom === 'number' && typeof opos === 'number' && opos === plannedFrom) {
+              posMatchedId = org.id
+              desiredDestinationId = dst.id
+              expectedDieValue =
+                (pm as any)?.dieValue ?? (m as any)?.dieValue
+              break
             }
           }
           // Planned point-to-point: check both origin and destination positions
@@ -337,13 +419,10 @@ export const executeRobotTurnWithGNU = async (
               opos === plannedFrom &&
               dpos === plannedTo
             ) {
-              // Expected die is absolute difference (relative to mover perspective)
-              expectedDie = Math.abs(plannedFrom - plannedTo)
-              matchedDie = (pm as any)?.dieValue
-              if (typeof matchedDie === 'number' && matchedDie !== expectedDie) {
-                continue
-              }
               posMatchedId = org.id
+              desiredDestinationId = dst.id
+              expectedDieValue =
+                (pm as any)?.dieValue ?? (m as any)?.dieValue
               break
             }
           }
@@ -351,126 +430,94 @@ export const executeRobotTurnWithGNU = async (
         if (posMatchedId) break
       }
       if (posMatchedId) {
-        // Position-based mapping succeeded; do not treat as override
         originIdToUse = posMatchedId
-        // Update mapping telemetry fields to reflect position-based match
         mappedOriginId = posMatchedId
-        // We intentionally do NOT set usedFallback/aiFallbackUsed here
       } else {
-      // Fallback: planned step could not be matched by id or position+die
-      // Treat as CORE move mismatch when we had a planned step
-      aiFallbackUsed = true
-      usedFallback = true
-      fallbackReason = stepFromPlan ? 'core-move-mismatch' : 'no-gnu-hints-or-mapping-failed'
-      if (fallbackReason) fallbackReasons.push(fallbackReason)
-      try {
-        if (fallbackReason === 'core-move-mismatch') {
-          const diag = {
-            ts: new Date().toISOString(),
-            gameId: (workingGame as any)?.id,
-            positionId,
-            roll,
-            dir: (workingGame.activePlayer as any)?.direction || 'clockwise',
-            planned: { from: plannedFrom, to: plannedTo, kind: plannedKind },
-            readyMovesSample: (ready as any[]).slice(0, 5).map((m: any) => {
-              const pm = Array.isArray(m.possibleMoves) && m.possibleMoves[0]
-              const oPos = pm?.origin?.position?.[(workingGame.activePlayer as any)?.direction || 'clockwise']
-              const dPos = pm?.destination?.position?.[(workingGame.activePlayer as any)?.direction || 'clockwise']
-              return { die: m?.dieValue, originPos: typeof oPos === 'number' ? oPos : null, destPos: typeof dPos === 'number' ? dPos : null, kind: m?.moveKind || pm?.moveKind }
-            }),
+        // GNU planned step could not be matched - log diagnostic info and fail
+        const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
+        const color = (workingGame.activePlayer as any)?.color || 'unknown'
+        const currentRoll = (workingGame.activePlayer as any)?.dice?.currentRoll
+        logger.error('MISMATCH DIAGNOSTIC:')
+        logger.error('  Active player: color=' + color + ', direction=' + dir)
+        logger.error('  Current roll in game:', currentRoll)
+        logger.error('  Roll used for GNU hints:', roll)
+        logger.error('  Plan index:', planIdx, 'of', planLength)
+        logger.error('  Full plan:', JSON.stringify(plan.map((s: any) => ({ from: s.from, to: s.to, kind: s.moveKind }))))
+        logger.error('  GNU planned: from=' + plannedFrom + ', to=' + plannedTo + ', kind=' + plannedKind)
+        logger.error(
+          '  Bar-first: barCount=' +
+            barByDir +
+            ', barMoves=' +
+            barMoves.length
+        )
+        logger.error('  CORE ready moves (count=' + ready.length + '):')
+        for (const m of ready) {
+          logger.error('    Move dieValue=' + (m as any).dieValue + ', stateKind=' + (m as any).stateKind + ', moveKind=' + (m as any).moveKind)
+          if (!Array.isArray((m as any).possibleMoves)) {
+            logger.error('      (no possibleMoves array)')
+            continue
           }
-          const outDir = path.join(process.cwd(), 'scripts', 'diagnostics')
-          const outFile = path.join(outDir, 'core-mismatch.log')
-          try { fs.mkdirSync(outDir, { recursive: true }) } catch {}
-          fs.appendFile(outFile, JSON.stringify(diag) + '\n', () => {})
+          logger.error('      possibleMoves count=' + (m as any).possibleMoves.length)
+          for (const pm of (m as any).possibleMoves) {
+            const opos = (pm as any)?.origin?.position?.[dir]
+            const dpos = (pm as any)?.destination?.position?.[dir]
+            const dkind = (pm as any)?.destination?.kind
+            const pmDie = (pm as any)?.dieValue
+            logger.error('      origin=' + opos + ', dest=' + (dkind === 'off' ? 'OFF' : dpos) + ', pmDie=' + pmDie)
+          }
         }
-      } catch {}
-      const prioritize = (m: any) => {
-        if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0)
-          return 3
-        const mk = m.moveKind || m.possibleMoves[0]?.moveKind
-        if (mk === 'bear-off') return 0
-        if (m.possibleMoves[0]?.isHit) return 1
-        return 2
+        const errorMsg = stepFromPlan
+          ? `GNU planned move (from: ${plannedFrom}, to: ${plannedTo}, kind: ${plannedKind}) not found in CORE legal moves`
+          : 'No GNU hints available and no plan to execute'
+        throw new Error(`[AI] ${errorMsg}`)
       }
-      ready.sort((a, b) => prioritize(a) - prioritize(b))
-      originIdToUse = ready[0]?.possibleMoves?.[0]?.origin?.id ?? null
       }
     }
 
     if (!originIdToUse) {
-      // Nothing executable — ask core to complete the turn if possible
-      workingGame = CoreUtil.Game.checkAndCompleteTurn(workingGame)
-      // Build CORE legality snapshot
-      const dirSnap = (workingGame.activePlayer as any)?.direction || 'clockwise'
-      const barCnt = ((workingGame.board as any)?.bar?.[dirSnap]?.checkers || []).length
-      const offCnt = ((workingGame.board as any)?.off?.[dirSnap]?.checkers || []).length
-      const sample: any[] = []
-      for (const m of ready as any[]) {
-        if (!Array.isArray(m.possibleMoves) || m.possibleMoves.length === 0) continue
-        const pm = m.possibleMoves[0]
-        const o = pm?.origin
-        const d = pm?.destination
-        const oPos = o?.position ? (o.position as any)[dirSnap] : null
-        const dPos = d?.position ? (d.position as any)[dirSnap] : null
-        sample.push({ die: (m as any)?.dieValue, originPos: typeof oPos === 'number' ? oPos : null, destPos: typeof dPos === 'number' ? dPos : null, kind: (m as any)?.moveKind || (pm as any)?.moveKind })
-        if (sample.length >= 5) break
-      }
-      telemetry.push({
-        step: 8 - guard,
-        positionId,
-        roll,
-        rollSource,
-        singleDieRemaining: ready.length === 1,
-        planLength,
-        planIndex: planIdx,
-        planSource: 'turn-plan',
-        hintCount: planLength > 0 ? 1 : 0,
-        mappedOriginId,
-        usedFallback: true,
-        fallbackReason: 'no-executable-origin',
-        postState: workingGame.stateKind,
-        plannedFrom,
-        plannedTo,
-        plannedKind,
-        legalOriginIds,
-        mappingStrategy: mappedOriginId ? 'id' : 'none',
-        mappingOutcome: 'no-legal',
-        activeDirection: dirSnap,
-        barCount: barCnt,
-        offCount: offCnt,
-        readyMovesSample: sample,
-      })
-      logger.info('[AI] Fallback completion: no executable origin', {
-        positionId,
-        roll,
-        planLength,
-        planIndex: planIdx,
-        postState: workingGame.stateKind,
-      })
-      break
+      // No executable origin found - this is an error, not a fallback
+      throw new Error(`[AI] No executable origin found for GNU planned move (planned: from=${plannedFrom}, to=${plannedTo}, kind=${plannedKind})`)
     }
 
-    // Ensure dice order consumes the intended die first (avoid CORE picking the other die)
-    try {
-      const cr = ((workingGame.activePlayer as any)?.dice?.currentRoll || []) as number[]
-      if (
-        typeof expectedDie === 'number' &&
-        Array.isArray(cr) &&
-        cr.length === 2 &&
-        cr[0] !== cr[1] &&
-        cr[1] === expectedDie &&
-        cr[0] !== expectedDie
-      ) {
-        workingGame = CoreUtil.Game.switchDice(workingGame as any) as any
-      }
-    } catch {}
-
     // Execute via core to ensure correctness and win checks
+    const preExecState = workingGame.stateKind
+    const preExecMoveCount = ((workingGame.activePlay?.moves || []) as any[]).filter((m: any) => m.stateKind === 'ready').length
+
+    // Log what we're about to execute vs what GNU planned
+    const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
+    let execOriginPos: number | undefined
+    let execDestPos: number | undefined
+    let execDie: number | undefined
+    for (const m of ready) {
+      if (!Array.isArray((m as any).possibleMoves)) continue
+      for (const pm of (m as any).possibleMoves) {
+        if ((pm as any)?.origin?.id === originIdToUse) {
+          execOriginPos = (pm as any)?.origin?.position?.[dir]
+          execDestPos = (pm as any)?.destination?.position?.[dir]
+          execDie = (m as any).dieValue
+          break
+        }
+      }
+      if (execOriginPos !== undefined) break
+    }
+    logger.info('[AI] EXECUTING: planIdx=' + planIdx + ', GNU planned=' + plannedFrom + '→' + plannedTo +
+      ', CORE executing=' + execOriginPos + '→' + execDestPos + ' (die=' + execDie + ')')
+
+    const moveOptions =
+      desiredDestinationId || typeof expectedDieValue === 'number'
+        ? {
+            desiredDestinationId: desiredDestinationId ?? undefined,
+            expectedDieValue: expectedDieValue,
+          }
+        : undefined
     workingGame = CoreUtil.Game.executeAndRecalculate(
       workingGame,
-      originIdToUse
+      originIdToUse,
+      moveOptions
     )
+    const postExecState = workingGame.stateKind
+    const postExecMoveCount = ((workingGame.activePlay?.moves || []) as any[]).filter((m: any) => m.stateKind === 'ready').length
+    logger.info('[AI] Move executed: preState=' + preExecState + ', postState=' + postExecState + ', readyMoves: ' + preExecMoveCount + ' -> ' + postExecMoveCount)
     // Build CORE legality snapshot for telemetry
     const dirSnap2 = (workingGame.activePlayer as any)?.direction || 'clockwise'
     const barCnt2 = ((workingGame.board as any)?.bar?.[dirSnap2]?.checkers || []).length
@@ -497,19 +544,16 @@ export const executeRobotTurnWithGNU = async (
       planSource: 'turn-plan',
       hintCount: planLength > 0 ? 1 : 0,
       mappedOriginId,
-      usedFallback,
-      fallbackReason,
+      usedFallback: false,
       postState: workingGame.stateKind,
       plannedFrom,
       plannedTo,
       plannedKind,
       legalOriginIds,
       mappingStrategy: mappedOriginId
-        ? (isPlanOriginLegal ? 'id' : (originIdToUse && originIdToUse === mappedOriginId ? 'position' : 'rehint'))
+        ? (isPlanOriginLegal ? 'id' : 'position')
         : 'none',
-      mappingOutcome: usedFallback
-        ? (mappedOriginId ? 'id-miss' : 'no-origin')
-        : (mappedOriginId ? ((isPlanOriginLegal || (originIdToUse && originIdToUse === mappedOriginId)) ? 'ok' : 'ok-rehint') : 'no-origin'),
+      mappingOutcome: mappedOriginId ? 'ok' : 'no-origin',
       expectedDie: expectedDie as any,
       matchedDie: matchedDie as any,
       activeDirection: dirSnap2,
@@ -517,56 +561,26 @@ export const executeRobotTurnWithGNU = async (
       offCount: offCnt2,
       readyMovesSample: sample2,
     })
-    logger.info('[AI] Step executed (turn-plan)', {
+    logger.info('[AI] Step executed (step-plan)', {
       positionId,
       roll,
       planLength,
       planIndex: planIdx,
       mappedOriginId,
-      usedFallback,
-      fallbackReason,
       postState: workingGame.stateKind,
     })
 
-    if (!usedFallback && stepFromPlan) {
-      planIdx += 1
+    if (stepFromPlan) {
+      // plan is recomputed each step, so planIdx is always 0
     }
     if (workingGame.stateKind === 'completed') break
   }
 
   const result: BackgammonGameRolling = workingGame as BackgammonGameRolling
-  if (aiFallbackUsed || fallbackReasons.length > 0) {
-    const primaryReason = (fallbackReasons[0] || 'unknown') as OverrideReason
-    const info: OverrideInfo = {
-      reasonCode: primaryReason,
-      reasonText:
-        primaryReason === 'plan-origin-not-legal'
-          ? 'Planned origin not legal under current READY set'
-          : primaryReason === 'core-move-mismatch'
-          ? 'GNU planned step not present in CORE READY set (position/kind/die)'
-          : primaryReason === 'mapping-failed'
-          ? 'Failed to map GNU step to Nodots containers'
-          : primaryReason === 'no-gnu-hints' || primaryReason === 'no-gnu-hints-or-mapping-failed'
-          ? 'GNU returned no hints or mapping failed'
-          : 'AI fallback was used',
-    }
-    Object.defineProperty(result as any, '__aiFallback', {
-      value: info,
-      enumerable: false,
-      configurable: true,
-    })
-  }
   Object.defineProperty(result as any, '__aiTelemetry', {
     value: telemetry,
     enumerable: false,
     configurable: true,
   })
-  if (fallbackReasons.length > 0) {
-    Object.defineProperty(result as any, '__aiFallbackReasons', {
-      value: fallbackReasons,
-      enumerable: false,
-      configurable: true,
-    })
-  }
   return result
 }
