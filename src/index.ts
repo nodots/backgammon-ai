@@ -102,3 +102,6 @@ export * from './hintContext.js';
 // Export AI provider implementations
 export { GNUAIProvider } from './GNUAIProvider.js';
 export { executeRobotTurnWithGNU } from './robotExecution.js';
+
+// Export luck analysis
+export * from './luckCalculator.js';
