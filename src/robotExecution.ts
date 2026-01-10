@@ -255,9 +255,19 @@ export const executeRobotTurnWithGNU = async (
   while (guard-- > 0 && workingGame.stateKind === 'moving') {
     const moves = (workingGame.activePlay?.moves || []) as any[]
     const ready = moves.filter((m) => m.stateKind === 'ready')
+    // Debug: log start of iteration
+    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({
+      startOfIteration: true,
+      guardValue: guard,
+      stateKind: workingGame.stateKind,
+      totalMoves: moves.length,
+      readyMoves: ready.length,
+      planIdx
+    }) + '\n')
 
     // If no READY moves remain, let core decide turn completion
     if (ready.length === 0) {
+      fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({ noReadyMoves: true, breakingLoop: true }) + '\n')
       workingGame = CoreUtil.Game.checkAndCompleteTurn(workingGame)
       break
     }
@@ -324,19 +334,48 @@ export const executeRobotTurnWithGNU = async (
       readyMoves: ready.length,
       plannedKind,
     })
+    // Debug: write ready moves info to file
+    const readyDebug = {
+      timestamp: new Date().toISOString(),
+      readyCount: ready.length,
+      barMovesCount: barMoves.length,
+      barByDir,
+      barBothDirs,
+      activeDir,
+      activeColor,
+      plannedKind,
+      plannedTo,
+      readyMoves: ready.map((m: any) => ({
+        id: m.id,
+        dieValue: m.dieValue,
+        moveKind: m.moveKind,
+        stateKind: m.stateKind,
+        possibleMovesCount: m.possibleMoves?.length || 0,
+        firstPossibleMove: m.possibleMoves?.[0] ? {
+          originKind: m.possibleMoves[0]?.origin?.kind,
+          originId: m.possibleMoves[0]?.origin?.id,
+        } : null
+      }))
+    }
+    fs.writeFileSync('/tmp/ready-debug.json', JSON.stringify(readyDebug, null, 2))
     // ALWAYS use position-based matching that validates both origin AND destination.
     // Simple origin ID matching is not sufficient because the same origin can have
     // multiple destinations with different dice (e.g., from position 6: 6→5 with die 1, 6→2 with die 4).
     if (barMoves.length > 0) {
       // Bar-first rule: if any bar reentry is available, ignore non-bar GNU plans.
       let barMatchedId: string | null = null
+      const barDebugLog: string[] = []
+      barDebugLog.push(`[BAR-DEBUG] Bar moves found: ${barMoves.length}, plannedKind: ${plannedKind}, plannedTo: ${plannedTo}, typeof plannedTo: ${typeof plannedTo}`)
+      logger.info('[BAR-DEBUG] Bar moves found:', barMoves.length, 'plannedKind:', plannedKind, 'plannedTo:', plannedTo, 'typeof plannedTo:', typeof plannedTo)
       if (plannedKind === 'reenter') {
         const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
+        logger.info('[BAR-DEBUG] Direction:', dir)
         for (const m of barMoves) {
           if (!Array.isArray(m.possibleMoves)) continue
           for (const pm of m.possibleMoves) {
             if (pm?.origin?.kind !== 'bar') continue
             const dpos = (pm as any)?.destination?.position?.[dir]
+            logger.info('[BAR-DEBUG] Checking pm: dpos=', dpos, 'typeof dpos:', typeof dpos, 'plannedTo=', plannedTo, 'match:', dpos === plannedTo)
             if (
               typeof plannedTo === 'number' &&
               typeof dpos === 'number' &&
@@ -346,6 +385,7 @@ export const executeRobotTurnWithGNU = async (
               desiredDestinationId = pm?.destination?.id ?? null
               expectedDieValue =
                 (pm as any)?.dieValue ?? (m as any)?.dieValue
+              logger.info('[BAR-DEBUG] Match found: barMatchedId=', barMatchedId, 'destId=', desiredDestinationId, 'die=', expectedDieValue)
               break
             }
           }
@@ -353,6 +393,7 @@ export const executeRobotTurnWithGNU = async (
         }
       }
       if (!barMatchedId) {
+        logger.info('[BAR-DEBUG] No match found, using fallback')
         const firstBarMove = barMoves.find((m) =>
           Array.isArray(m.possibleMoves)
         )
@@ -361,11 +402,36 @@ export const executeRobotTurnWithGNU = async (
         desiredDestinationId = fallbackMove?.destination?.id ?? null
         expectedDieValue =
           (fallbackMove as any)?.dieValue ?? (firstBarMove as any)?.dieValue
+        logger.info('[BAR-DEBUG] Fallback: barMatchedId=', barMatchedId, 'destId=', desiredDestinationId, 'die=', expectedDieValue)
       }
       if (barMatchedId) {
         originIdToUse = barMatchedId
         mappedOriginId = barMatchedId
+        logger.info('[BAR-DEBUG] Setting originIdToUse=', originIdToUse)
       }
+      // Write debug info to file for analysis
+      const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
+      const debugInfo = {
+        timestamp: new Date().toISOString(),
+        barMovesCount: barMoves.length,
+        plannedKind,
+        plannedTo,
+        typeofPlannedTo: typeof plannedTo,
+        direction: dir,
+        barMatchedId,
+        desiredDestinationId,
+        expectedDieValue,
+        originIdToUse,
+        possibleMoves: barMoves.flatMap((m: any) =>
+          (m.possibleMoves || []).map((pm: any) => ({
+            originKind: pm?.origin?.kind,
+            dpos: pm?.destination?.position?.[dir],
+            dieValue: pm?.dieValue
+          }))
+        )
+      }
+      fs.writeFileSync('/tmp/bar-debug.json', JSON.stringify(debugInfo, null, 2))
+      logger.info('[BAR-DEBUG] Wrote debug info to /tmp/bar-debug.json')
     } else {
       {
       // Attempt position-based mapping (origin+destination+kind match)
@@ -425,8 +491,30 @@ export const executeRobotTurnWithGNU = async (
         originIdToUse = posMatchedId
         mappedOriginId = posMatchedId
       } else {
-        // GNU planned step could not be matched - log diagnostic info and fail
+        // GNU planned step could not be matched - dump to file and fail
         const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
+        const mismatchDebug = {
+          timestamp: new Date().toISOString(),
+          planIdx,
+          planLength,
+          plannedFrom,
+          plannedTo,
+          plannedKind,
+          direction: dir,
+          readyMovesCount: ready.length,
+          readyMoves: ready.map((m: any) => ({
+            dieValue: m.dieValue,
+            moveKind: m.moveKind,
+            stateKind: m.stateKind,
+            possibleMoves: (m.possibleMoves || []).map((pm: any) => ({
+              originPos: pm?.origin?.position?.[dir],
+              destPos: pm?.destination?.position?.[dir],
+              originKind: pm?.origin?.kind,
+              destKind: pm?.destination?.kind,
+            }))
+          }))
+        }
+        fs.writeFileSync('/tmp/step2-mismatch.json', JSON.stringify(mismatchDebug, null, 2))
         const color = (workingGame.activePlayer as any)?.color || 'unknown'
         const currentRoll = (workingGame.activePlayer as any)?.dice?.currentRoll
         logger.error('MISMATCH DIAGNOSTIC:')
@@ -502,11 +590,27 @@ export const executeRobotTurnWithGNU = async (
             expectedDieValue: expectedDieValue,
           }
         : undefined
+    logger.info('[BAR-DEBUG] About to execute: originIdToUse=', originIdToUse, 'moveOptions=', JSON.stringify(moveOptions))
+    const preBarCount = ((workingGame.board as any)?.bar?.[(workingGame.activePlayer as any)?.direction]?.checkers || []).length
+    const execDebug = {
+      timestamp: new Date().toISOString(),
+      planIdx,
+      originIdToUse,
+      moveOptions,
+      preBarCount,
+      plannedFrom,
+      plannedTo,
+      plannedKind,
+    }
+    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify(execDebug) + '\n')
     workingGame = CoreUtil.Game.executeAndRecalculate(
       workingGame,
       originIdToUse,
       moveOptions
     )
+    const postBarCount = ((workingGame.board as any)?.bar?.[(workingGame.activePlayer as any)?.direction]?.checkers || []).length
+    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({ postExec: true, postBarCount, stateKind: workingGame.stateKind, workingGameId: (workingGame as any).id }) + '\n')
+
     const postExecState = workingGame.stateKind
     const postExecMoveCount = ((workingGame.activePlay?.moves || []) as any[]).filter((m: any) => m.stateKind === 'ready').length
     logger.info('[AI] Move executed: preState=' + preExecState + ', postState=' + postExecState + ', readyMoves: ' + preExecMoveCount + ' -> ' + postExecMoveCount)
@@ -563,11 +667,27 @@ export const executeRobotTurnWithGNU = async (
     })
 
     // Advance to next step in plan after successful execution
+    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({ beforePlanIdxIncrement: true, stepFromPlan: !!stepFromPlan, planIdx }) + '\n')
     if (stepFromPlan) {
       planIdx++
+      fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({ afterPlanIdxIncrement: true, planIdx }) + '\n')
     }
     if (workingGame.stateKind === 'completed') break
+    // Debug: log end-of-iteration state
+    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({
+      endOfIteration: true,
+      guardRemaining: guard,
+      stateKind: workingGame.stateKind,
+      willContinue: guard > 0 && workingGame.stateKind === 'moving'
+    }) + '\n')
   }
+
+  // Debug: log function exit
+  fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({
+    functionExit: true,
+    finalStateKind: workingGame.stateKind,
+    totalTelemetrySteps: telemetry.length
+  }) + '\n')
 
   const result: BackgammonGameRolling = workingGame as BackgammonGameRolling
   Object.defineProperty(result as any, '__aiTelemetry', {
