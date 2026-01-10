@@ -191,11 +191,10 @@ export const executeRobotTurnWithGNU = async (
   // One-shot plan: ask GNU once for the full sequence and execute without re-asking mid-turn
   const startMoves = (workingGame.activePlay?.moves || []) as any[]
   const startReady = startMoves.filter((m) => m.stateKind === 'ready')
-  let roll: BackgammonRoll
-  let rollSource: 'ready-derived' = 'ready-derived'
+  const rollSource: 'one-shot' = 'one-shot'
   const d1 = (startReady[0]?.dieValue ?? 1) as BackgammonDieValue
   const d2 = (startReady[1]?.dieValue ?? d1) as BackgammonDieValue
-  roll = [d1, d2]
+  const roll: BackgammonRoll = [d1, d2]
 
   const exportToGnuPositionId = await getExportToGnuPositionId()
 
@@ -243,6 +242,16 @@ export const executeRobotTurnWithGNU = async (
     return hint?.moves || []
   }
 
+  // Get plan ONCE before the loop (true one-shot planning to avoid die-tracking bug #250)
+  let plan: MoveStep[] = []
+  try {
+    plan = await getPlanForGame(workingGame, roll)
+  } catch (err) {
+    throw new Error(`[AI] Failed to get GNU hints: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  let planIdx = 0
+  const planLength = plan.length
+
   while (guard-- > 0 && workingGame.stateKind === 'moving') {
     const moves = (workingGame.activePlay?.moves || []) as any[]
     const ready = moves.filter((m) => m.stateKind === 'ready')
@@ -252,23 +261,6 @@ export const executeRobotTurnWithGNU = async (
       workingGame = CoreUtil.Game.checkAndCompleteTurn(workingGame)
       break
     }
-
-    // Refresh roll and plan per step to avoid stale sequences
-    if (ready.length > 0) {
-      const d1 = (ready[0]?.dieValue ?? 1) as BackgammonDieValue
-      const d2 = (ready[1]?.dieValue ?? d1) as BackgammonDieValue
-      roll = [d1, d2]
-      rollSource = 'ready-derived'
-    }
-
-    let plan: MoveStep[] = []
-    try {
-      plan = await getPlanForGame(workingGame, roll)
-    } catch (err) {
-      throw new Error(`[AI] Failed to get GNU hints: ${err instanceof Error ? err.message : String(err)}`)
-    }
-    const planIdx = 0
-    const planLength = plan.length
 
     // Next planned step (if any)
     const positionId = workingGame.gnuPositionId
@@ -541,7 +533,7 @@ export const executeRobotTurnWithGNU = async (
       singleDieRemaining: ready.length === 1,
       planLength,
       planIndex: planIdx,
-      planSource: 'turn-plan',
+      planSource: 'one-shot',
       hintCount: planLength > 0 ? 1 : 0,
       mappedOriginId,
       usedFallback: false,
@@ -561,7 +553,7 @@ export const executeRobotTurnWithGNU = async (
       offCount: offCnt2,
       readyMovesSample: sample2,
     })
-    logger.info('[AI] Step executed (step-plan)', {
+    logger.info('[AI] Step executed (one-shot)', {
       positionId,
       roll,
       planLength,
@@ -570,8 +562,9 @@ export const executeRobotTurnWithGNU = async (
       postState: workingGame.stateKind,
     })
 
+    // Advance to next step in plan after successful execution
     if (stepFromPlan) {
-      // plan is recomputed each step, so planIdx is always 0
+      planIdx++
     }
     if (workingGame.stateKind === 'completed') break
   }
