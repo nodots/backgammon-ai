@@ -1,3 +1,19 @@
+// Node version check - MUST be first, before any imports that trigger native addon loading
+const REQUIRED_NODE_MAJOR = 20;
+const currentMajor = parseInt(process.versions.node.split('.')[0], 10);
+if (currentMajor !== REQUIRED_NODE_MAJOR) {
+  console.error('\x1b[31m%s\x1b[0m', '╔═══════════════════════════════════════════════════════════════╗');
+  console.error('\x1b[31m%s\x1b[0m', '║  FATAL: Wrong Node.js version                                 ║');
+  console.error('\x1b[31m%s\x1b[0m', '╠═══════════════════════════════════════════════════════════════╣');
+  console.error('\x1b[31m%s\x1b[0m', `║  Required: Node.js ${REQUIRED_NODE_MAJOR}.x                                        ║`);
+  console.error('\x1b[31m%s\x1b[0m', `║  Current:  Node.js ${process.versions.node.padEnd(20)}                    ║`);
+  console.error('\x1b[31m%s\x1b[0m', '╠═══════════════════════════════════════════════════════════════╣');
+  console.error('\x1b[31m%s\x1b[0m', '║  The gnubg-hints native addon requires Node.js 20.            ║');
+  console.error('\x1b[31m%s\x1b[0m', '║  Fix: Run `nvm use 20` then try again.                        ║');
+  console.error('\x1b[31m%s\x1b[0m', '╚═══════════════════════════════════════════════════════════════╝');
+  process.exit(1);
+}
+
 import type { BackgammonMoveBase } from '@nodots-llc/backgammon-types';
 import type {
   DoubleHint,
