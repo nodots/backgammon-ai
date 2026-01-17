@@ -689,6 +689,15 @@ export const executeRobotTurnWithGNU = async (
     totalTelemetrySteps: telemetry.length
   }) + '\n')
 
+  // CRITICAL FIX: Transition from 'moved' to 'rolling' state
+  // checkAndCompleteTurn only transitions to 'moved', we need handleRobotMovedState
+  // to call confirmTurn and transition to 'rolling' for the next player
+  if (workingGame.stateKind === 'moved') {
+    logger.info('[AI] Game in moved state, calling handleRobotMovedState to transition to rolling')
+    workingGame = CoreUtil.Game.handleRobotMovedState(workingGame)
+    logger.info('[AI] After handleRobotMovedState, stateKind:', workingGame.stateKind)
+  }
+
   const result: BackgammonGameRolling = workingGame as BackgammonGameRolling
   Object.defineProperty(result as any, '__aiTelemetry', {
     value: telemetry,
