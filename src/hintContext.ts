@@ -201,6 +201,7 @@ export function buildHintContextFromPlay(
   const request: HintRequest = {
     board,
     dice: deriveDiceFromPlay(play),
+    activePlayerDirection: play.player.direction,
     cubeValue: 1,
     cubeOwner: null,
     matchScore: [0, 0],
