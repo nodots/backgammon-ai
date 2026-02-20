@@ -563,18 +563,35 @@ export const executeRobotTurnWithGNU = async (
     const preExecState = workingGame.stateKind
     const preExecMoveCount = ((workingGame.activePlay?.moves || []) as any[]).filter((m: any) => m.stateKind === 'ready').length
 
-    // Log what we're about to execute vs what GNU planned
+    // Extract the actual CORE positions for the move we're about to execute.
+    // These are the authoritative source for history recording (not the GNU plan).
     const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
-    let execOriginPos: number | undefined
-    let execDestPos: number | undefined
+    let execOriginPos: number | 'bar' | undefined
+    let execDestPos: number | 'off' | undefined
     let execDie: number | undefined
+    let execMoveKind: string | undefined
+    let execIsHit = false
     for (const m of ready) {
       if (!Array.isArray((m as any).possibleMoves)) continue
       for (const pm of (m as any).possibleMoves) {
         if ((pm as any)?.origin?.id === originIdToUse) {
-          execOriginPos = (pm as any)?.origin?.position?.[dir]
-          execDestPos = (pm as any)?.destination?.position?.[dir]
+          const org = (pm as any)?.origin
+          const dst = (pm as any)?.destination
+          if (org?.kind === 'bar') {
+            execOriginPos = 'bar'
+            execMoveKind = 'reenter'
+          } else {
+            execOriginPos = org?.position?.[dir]
+            execMoveKind = 'point-to-point'
+          }
+          if (dst?.kind === 'off') {
+            execDestPos = 'off'
+            execMoveKind = 'bear-off'
+          } else {
+            execDestPos = dst?.position?.[dir]
+          }
           execDie = (m as any).dieValue
+          execIsHit = (m as any).isHit || false
           break
         }
       }
@@ -645,6 +662,12 @@ export const executeRobotTurnWithGNU = async (
       plannedFrom,
       plannedTo,
       plannedKind,
+      // Actual executed positions from CORE (authoritative for history recording)
+      executedFrom: execOriginPos,
+      executedTo: execDestPos,
+      executedDieValue: execDie,
+      executedMoveKind: execMoveKind,
+      executedIsHit: execIsHit,
       legalOriginIds,
       mappingStrategy: mappedOriginId
         ? (isPlanOriginLegal ? 'id' : 'position')
