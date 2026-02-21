@@ -56,8 +56,8 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@nodots-llc/backgammon-types": "4.6.4-staging.6",
-    "@nodots-llc/backgammon-core": "4.6.4-staging.6",
+    "@nodots-llc/backgammon-types": "file:../types",
+    "@nodots-llc/backgammon-core": "file:../core",
     "@nodots-llc/gnubg-hints": "^4.6.2",
     "@types/socket.io-client": "^1.4.36",
     "socket.io-client": "^4.8.1"
