@@ -10,11 +10,19 @@ import type {
   BackgammonMoveDirection,
 } from '@nodots-llc/backgammon-types';
 import type { MoveHint, MoveStep } from '@nodots-llc/gnubg-hints';
+import type { GnubgColor } from './hintContext.js';
 import {
   buildHintContextFromPlay,
   getContainerKind,
   getNormalizedPosition,
 } from './hintContext.js';
+
+// Map direction to GnubgColor for getNormalizedPosition, which reads
+// position.clockwise when color is 'white' and position.counterclockwise
+// when color is 'black'.
+function directionToGnuColor(dir: BackgammonMoveDirection): GnubgColor {
+  return dir === 'clockwise' ? 'white' : 'black';
+}
 import { gnubgHints } from './gnubg.js';
 // Optional policy model support (not required for baseline build)
 let selectMoveWithPolicy: ((play: BackgammonPlayMoving, model: any) => BackgammonMoveReady | undefined) | null = null
@@ -243,8 +251,8 @@ function getOpeningBookMove(
         if (!direction) {
           continue
         }
-        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, direction)
-        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, direction)
+        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, directionToGnuColor(direction))
+        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, directionToGnuColor(direction))
 
         if (originPos === 24 && destPos === 13 && preferredMove === '24/13') {
           logger.info(`[AI] ${robotName} Opening Book: Lover's Leap (24/13) for dice [${die1},${die2}]`)
@@ -282,8 +290,8 @@ function getBestStrategicMove(
         if (!direction) {
           continue
         }
-        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, direction)
-        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, direction)
+        const originPos = getNormalizedPosition(firstPossibleMove.origin as any, directionToGnuColor(direction))
+        const destPos = getNormalizedPosition(firstPossibleMove.destination as any, directionToGnuColor(direction))
 
         if (originPos !== null && destPos !== null) {
           const distance = originPos - destPos // Positive means advancing in normalized coordinates
@@ -352,8 +360,8 @@ function normalizeMoveSkeleton(
   const steps: NormalizedMoveStep[] = [];
 
   for (const possibleMove of move.possibleMoves) {
-    const from = getNormalizedPosition(possibleMove.origin, direction);
-    const to = getNormalizedPosition(possibleMove.destination, direction);
+    const from = getNormalizedPosition(possibleMove.origin, directionToGnuColor(direction));
+    const to = getNormalizedPosition(possibleMove.destination, directionToGnuColor(direction));
 
     if (from === null || to === null) {
       continue;

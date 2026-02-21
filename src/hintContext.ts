@@ -221,9 +221,19 @@ export function buildHintContextFromGame(
   const normalization = deriveNormalizationFromGame(game);
   const normalizedBoard = normalizeBoardForHints(game.board, normalization.toGnu);
 
+  // Normalize activePlayerColor through the same color map used for the board.
+  // Without this, a game where clockwise=BLACK passes 'black' as the active
+  // color even though the board has been remapped so clockwise checkers are
+  // 'white'. This causes convertBoardToGnuBg to select the wrong player's
+  // checkers via rollIsWhite.
+  const normalizedActivePlayerColor = overrides.activePlayerColor
+    ? normalization.toGnu[overrides.activePlayerColor]
+    : undefined;
+
   const request = createHintRequestFromGame(game, {
     ...overrides,
     board: normalizedBoard,
+    activePlayerColor: normalizedActivePlayerColor,
     cubeOwner:
       overrides.cubeOwner ??
       normalizeCubeOwner(game.cube?.owner?.color, normalization.toGnu),

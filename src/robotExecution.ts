@@ -144,6 +144,7 @@ const skillConfigToHintConfig = (skill: SkillConfig): Partial<HintConfig> => {
     evalPlies: skill.evalPlies ?? 2,
     moveFilter: skill.moveFilter ?? 2,
     usePruning: skill.usePruning ?? true,
+    noise: skill.noise ?? 0,
   }
 }
 
@@ -218,12 +219,11 @@ export const executeRobotTurnWithGNU = async (
       'clockwise'
     const activePlayerColor =
       ((currentGame.activePlayer as any)?.color as BackgammonColor) ?? 'white'
-    const noiseLevel = skillConfig?.noise ?? 0
-    const maxHints = noiseLevel > 0 ? 5 : 1
+    // GNU rNoise is the sole noise mechanism -- always request 1 hint
     const hints = await GnuBgHints.getHintsFromPositionId(
       planPositionId,
       currentRoll,
-      maxHints,
+      1,
       activePlayerDirection,
       activePlayerColor
     )
@@ -231,15 +231,7 @@ export const executeRobotTurnWithGNU = async (
       return []
     }
 
-    let selectedHintIndex = 0
-    if (noiseLevel > 0 && hints.length > 1 && Math.random() < noiseLevel) {
-      const maxIndex = Math.min(hints.length - 1, Math.floor(noiseLevel * 5) + 1)
-      selectedHintIndex = Math.floor(Math.random() * (maxIndex + 1))
-      logger.info('[AI] Noise applied: selected hint #%d of %d (noise: %s)',
-        selectedHintIndex + 1, hints.length, noiseLevel)
-    }
-    const hint = hints[selectedHintIndex]
-    return hint?.moves || []
+    return hints[0]?.moves || []
   }
 
   // Get plan ONCE before the loop (true one-shot planning to avoid die-tracking bug #250)
