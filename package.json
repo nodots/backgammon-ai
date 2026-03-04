@@ -58,7 +58,7 @@
   "dependencies": {
     "@nodots-llc/backgammon-types": "file:../types",
     "@nodots-llc/backgammon-core": "file:../core",
-    "@nodots-llc/gnubg-hints": "^4.6.2",
+    "@nodots-llc/gnubg-hints": "file:../gnubg-hints/gnubg-node-addon",
     "@types/socket.io-client": "^1.4.36",
     "socket.io-client": "^4.8.1"
   },
