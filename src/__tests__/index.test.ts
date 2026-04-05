@@ -5,40 +5,10 @@ import type {
   BackgammonPoint,
   BackgammonPoints,
 } from '@nodots-llc/backgammon-types';
-import { jest } from '@jest/globals';
-import type { MoveHint } from '@nodots-llc/gnubg-hints';
-
-let mockHints: MoveHint[] = []
-const initializeMock = jest.fn().mockResolvedValue(undefined)
-const getMoveHintsMock = jest.fn(async () => mockHints)
-
-jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
-  GnuBgHints: {
-    initialize: initializeMock,
-    configure: jest.fn(),
-    getMoveHints: getMoveHintsMock,
-    getDoubleHint: jest.fn(),
-    getTakeHint: jest.fn(),
-    shutdown: jest.fn(),
-  },
-  createHintRequestFromGame: () => ({
-    board: { points: [], bar: {}, off: {} },
-    dice: [0, 0],
-    activePlayerColor: 'white',
-    activePlayerDirection: 'clockwise',
-    cubeValue: 1,
-    cubeOwner: null,
-    matchScore: [0, 0],
-    matchLength: 0,
-    crawford: false,
-    jacoby: false,
-    beavers: false,
-  }),
-}))
 
 const { selectBestMove } = await import('../moveSelection.js')
 
-describe('selectBestMove with GNU hints', () => {
+describe('selectBestMove heuristic selection', () => {
   function createTestPlay(): BackgammonPlayMoving {
     const points = Array.from({ length: 24 }, (_, index) => ({
       id: `pt-${index + 1}`,
@@ -89,7 +59,7 @@ describe('selectBestMove with GNU hints', () => {
 
     const player = {
       id: 'player-1',
-      userId: 'da7eac85-cf8f-49f4-b97d-9f40d3171b36',
+      userId: 'test-robot',
       color: 'white' as const,
       direction: 'clockwise' as const,
       stateKind: 'moving' as const,
@@ -123,49 +93,26 @@ describe('selectBestMove with GNU hints', () => {
       ],
     } as BackgammonMoveReady;
 
-    const moves = new Set<BackgammonMoveReady>([move]) as any;
-
     return {
       id: 'play-1',
       stateKind: 'moving',
       player,
       board,
-      moves,
+      moves: [move],
     } as unknown as BackgammonPlayMoving;
   }
 
-  it('selects the move suggested by the highest ranked hint', async () => {
+  it('selects a ready move via heuristics', async () => {
     const play = createTestPlay();
-
-    mockHints = [
-      {
-        rank: 1,
-        difference: 0,
-        equity: 0.42,
-        evaluation: {
-          win: 0.6,
-          winGammon: 0.1,
-          winBackgammon: 0.01,
-          loseGammon: 0.05,
-          loseBackgammon: 0.005,
-          equity: 0.42,
-          cubefulEquity: 0.42,
-        },
-        moves: [
-          {
-            from: 13,
-            to: 8,
-            moveKind: 'point-to-point',
-            isHit: false,
-            player: 'white',
-            fromContainer: 'point',
-            toContainer: 'point',
-          },
-        ],
-      },
-    ];
-
-    const result = await selectBestMove(play, 'gbg-bot');
+    const result = await selectBestMove(play);
     expect(result?.id).toBe('move-1');
+    expect(result?.stateKind).toBe('ready');
+  });
+
+  it('returns undefined for empty moves array', async () => {
+    const play = createTestPlay();
+    (play as any).moves = [];
+    const result = await selectBestMove(play);
+    expect(result).toBeUndefined();
   });
 });
