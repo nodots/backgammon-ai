@@ -1,3 +1,19 @@
+// Node version check - MUST be first, before any imports that trigger native addon loading
+const REQUIRED_NODE_MAJOR = 20;
+const currentMajor = parseInt(process.versions.node.split('.')[0], 10);
+if (currentMajor !== REQUIRED_NODE_MAJOR) {
+  console.error('\x1b[31m%s\x1b[0m', '╔═══════════════════════════════════════════════════════════════╗');
+  console.error('\x1b[31m%s\x1b[0m', '║  FATAL: Wrong Node.js version                                 ║');
+  console.error('\x1b[31m%s\x1b[0m', '╠═══════════════════════════════════════════════════════════════╣');
+  console.error('\x1b[31m%s\x1b[0m', `║  Required: Node.js ${REQUIRED_NODE_MAJOR}.x                                        ║`);
+  console.error('\x1b[31m%s\x1b[0m', `║  Current:  Node.js ${process.versions.node.padEnd(20)}                    ║`);
+  console.error('\x1b[31m%s\x1b[0m', '╠═══════════════════════════════════════════════════════════════╣');
+  console.error('\x1b[31m%s\x1b[0m', '║  The gnubg-hints native addon requires Node.js 20.            ║');
+  console.error('\x1b[31m%s\x1b[0m', '║  Fix: Run `nvm use 20` then try again.                        ║');
+  console.error('\x1b[31m%s\x1b[0m', '╚═══════════════════════════════════════════════════════════════╝');
+  process.exit(1);
+}
+
 import type { BackgammonMoveBase } from '@nodots-llc/backgammon-types';
 import type {
   DoubleHint,
@@ -6,6 +22,7 @@ import type {
   MoveHint,
   TakeHint,
 } from '@nodots-llc/gnubg-hints';
+import { MoveFilterSetting } from '@nodots-llc/gnubg-hints';
 import { gnubgHints, GnubgHintsIntegration } from './gnubg.js';
 import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers.js';
 
@@ -21,11 +38,26 @@ export async function registerAIProvider(): Promise<void> {
   const { GNUAIProvider } = await import('./GNUAIProvider.js');
 
   RobotAIRegistry.register(new GNUAIProvider());
+  // Initialize and configure GNU hints once so execution and analysis share identical settings
+  try {
+    await initializeGnubgHints({
+      config: DEFAULT_HINTS_CONFIG,
+    });
+  } catch (err) {
+    // Non-fatal: consumers may initialize separately; log for visibility
+    console.warn('[AI] gnubg-hints init/config skipped:', String(err));
+  }
   registered = true;
 }
 
 export type { DoubleHint, HintConfig, HintRequest, MoveHint, TakeHint };
 export { gnubgHints, GnubgHintsIntegration };
+// Default shared configuration used by robots and PR analysis
+export const DEFAULT_HINTS_CONFIG: Partial<HintConfig> = {
+  evalPlies: 2,
+  moveFilter: MoveFilterSetting.Large,
+  usePruning: true,
+};
 
 export async function initializeGnubgHints(options?: {
   weightsPath?: string;
@@ -86,3 +118,6 @@ export * from './hintContext.js';
 // Export AI provider implementations
 export { GNUAIProvider } from './GNUAIProvider.js';
 export { executeRobotTurnWithGNU } from './robotExecution.js';
+
+// Export luck analysis
+export * from './luckCalculator.js';

@@ -1,54 +1,151 @@
 # Nodots Backgammon AI
 
-Current version: 4.1.1.
+**Version 4.6.4** | AI Engine powered by GNU Backgammon
 
 <!-- COVERAGE-START -->
-
 ![Statements](https://img.shields.io/badge/Statements-60%25-orange?style=flat-square)
 ![Branches](https://img.shields.io/badge/Branches-32%25-red?style=flat-square)
 ![Functions](https://img.shields.io/badge/Functions-50%25-red?style=flat-square)
 ![Lines](https://img.shields.io/badge/Lines-60%25-orange?style=flat-square)
-
 <!-- COVERAGE-END -->
 
-A TypeScript library that provides AI capabilities for backgammon games using the native `@nodots-llc/gnubg-hints` addon to access GNU Backgammon's evaluation engine. This package is part of the Nodots Backgammon ecosystem and focuses on structured hints rather than spawning external binaries.
+A TypeScript library providing AI capabilities for backgammon games using the native `@nodots-llc/gnubg-hints` addon to access GNU Backgammon's evaluation engine. Features a plugin system for custom AI analyzers and comprehensive move analysis.
 
-## 🎯 What's New in v3.5.0
+## Table of Contents
 
-- 🔌 **Revolutionary Plugin System** - Open, extensible architecture for AI development
-- 🧠 **Nodots AI Engine** - New intelligent analyzer with strategic heuristics
-- 🌐 **Five Built-in Analyzers** - From random to world-class GNU Backgammon AI
-- 🚀 **Dynamic Plugin Loading** - Hot-swappable AI engines with automatic discovery
-- 💡 **Context-Aware Analysis** - Analyzers receive board state and position data
-- 🔓 **Open Development Platform** - Community-driven, plugin-friendly architecture
-- 📊 **Enhanced API Surface** - New exports for plugin development and integration
-- 🎯 **Template-Based Development** - Easy plugin creation with standardized interfaces
+- [Features](#features)
+- [What's New in v4.6](#whats-new-in-v46)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Move Selection System](#move-selection-system)
+- [Plugin System](#plugin-system)
+- [GNU Backgammon Integration](#gnu-backgammon-integration)
+- [Robot Execution](#robot-execution)
+- [Testing](#testing)
+- [License](#license)
+
+---
 
 ## Features
 
-### 🔌 **Plugin System & Openness**
+- **GNU Backgammon Integration** - World-class AI via native addon (2000+ FIBS rating equivalent)
+- **Plugin Architecture** - Extensible system for custom AI analyzers
+- **Multiple Strategies** - From random testing to tournament-grade analysis
+- **Structured Hints** - Equity calculations, move rankings, probability analysis
+- **Robot Execution** - Complete turn automation with telemetry
+- **TypeScript First** - Full type definitions and intelligent integration
 
-- **Open Architecture**: Plugin system enables community-contributed analyzers
-- **Five Built-in Analyzers**: Random, strategic, defensive, template, and world-class AI
-- **Hot-Swappable Intelligence**: Switch between AI engines seamlessly
-- **Context-Aware Analysis**: Analyzers receive board state and position information
-- **Dynamic Loading**: Automatic discovery and loading of custom plugins
-- **Template-Based Development**: Standardized interfaces for easy plugin creation
+---
 
-### 🧠 **AI Intelligence Options**
+## What's New in v4.6
 
-- **Nodots AI Engine**: Strategic heuristics with safety, offense, and racing priorities
-- **GNU Backgammon Integration**: World-class AI with 2000+ FIBS rating equivalent
-- **Multiple Strategies**: From random testing to tournament-grade analysis
-- **Extensible Framework**: Build custom analyzers for specialized strategies
+### Enhanced Robot Execution
+- One-shot GNU plan per turn for consistent move sequences
+- Improved position ID generation using Golden Rule encoding
+- Enhanced telemetry tracking for AI decisions
+- Better handling of constrained doubles scenarios
 
-### 🚀 **Production Ready**
+### Hint Context Improvements
+- Normalized board representation for GNU hints
+- Proper dice tuple handling for gnubg roll format
+- Board state tracking through all moves
 
-- **Native Hints**: Powered by the `@nodots-llc/gnubg-hints` addon – no external binaries to ship or manage
-- **TypeScript First**: Full type definitions and intelligent integration
-- **Cross-Platform**: Supports macOS, Linux with automated build scripts
-- **Comprehensive Analysis**: Equity calculations, move rankings, and probability analysis
-- **Minimal Dependencies**: CLI-only build without GUI components
+### AI Telemetry
+- Comprehensive tracking of AI decision-making
+- Override reason codes for debugging
+- Plan execution tracking (planLength, planIndex)
+- Position and roll source tracking
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        @nodots-llc/backgammon-ai                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                     Move Selection Layer                              │  │
+│  │                                                                       │  │
+│  │  selectBestMove(play, robotId)                                       │  │
+│  │         │                                                             │  │
+│  │         ▼                                                             │  │
+│  │  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐                 │  │
+│  │  │   GNU       │──▶│  Opening    │──▶│  Strategic  │──▶ First Move   │  │
+│  │  │   Hints     │   │   Book      │   │  Heuristics │                 │  │
+│  │  └─────────────┘   └─────────────┘   └─────────────┘                 │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                       │
+│                                    ▼                                       │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                      Plugin System                                    │  │
+│  │                                                                       │  │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │  │
+│  │  │   Random    │  │  Furthest   │  │   Nodots    │  │    GNUBG    │  │  │
+│  │  │  Analyzer   │  │  FromOff    │  │     AI      │  │  Analyzer   │  │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │  │
+│  │                                                                       │  │
+│  │           MoveAnalyzer Interface + Plugin Loader                      │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                       │
+│                                    ▼                                       │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                   GNU Backgammon Integration                          │  │
+│  │                                                                       │  │
+│  │  ┌─────────────────────────────────────────────────────────────────┐ │  │
+│  │  │              @nodots-llc/gnubg-hints (Native Addon)             │ │  │
+│  │  │                                                                 │ │  │
+│  │  │  getMoveHints()  │  getCubeHints()  │  getTakeHints()          │ │  │
+│  │  └─────────────────────────────────────────────────────────────────┘ │  │
+│  │                                                                       │  │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐   │  │
+│  │  │  Hint Context   │  │  GnubgHints     │  │  Position ID        │   │  │
+│  │  │  Builder        │  │  Integration    │  │  Generator          │   │  │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────────┘   │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                       │
+│                                    ▼                                       │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                    Robot Execution Layer                              │  │
+│  │                                                                       │  │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐   │  │
+│  │  │  executeRobot   │  │    Telemetry    │  │    Board State      │   │  │
+│  │  │  Turn           │  │    Tracking     │  │    Management       │   │  │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────────┘   │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Dependencies                                      │
+│  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐    │
+│  │ @nodots-llc/       │  │ @nodots-llc/       │  │ @nodots-llc/       │    │
+│  │ backgammon-core    │  │ backgammon-types   │  │ gnubg-hints        │    │
+│  │ (Logger, Board)    │  │ (Type definitions) │  │ (Native addon)     │    │
+│  └────────────────────┘  └────────────────────┘  └────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Project Structure
+
+```
+src/
+├── moveSelection.ts       # Main entry point for move selection
+├── robotExecution.ts      # Robot turn execution with telemetry
+├── gnubg.ts               # GnubgHintsIntegration class
+├── hintContext.ts         # Board normalization for hints
+├── moveAnalyzers.ts       # Built-in analyzer implementations
+├── pluginLoader.ts        # Dynamic plugin loading
+├── strategies/            # Move selection strategies
+│   ├── openingBook.ts     # Predefined opening moves
+│   └── heuristics.ts      # Strategic heuristics
+└── __tests__/             # Test files
+```
+
+---
 
 ## Installation
 
@@ -56,9 +153,19 @@ A TypeScript library that provides AI capabilities for backgammon games using th
 npm install @nodots-llc/backgammon-ai
 ```
 
-## Quick Start - Verified Examples
+### Requirements
 
-Here are **tested position IDs** that work with the integrated gnubg engine:
+- Node.js 18+
+- Working `node-gyp` toolchain (Python 3, C/C++ compiler)
+- Platform-specific build tools:
+  - macOS: `xcode-select --install`
+  - Debian/Ubuntu: `build-essential`
+
+---
+
+## Quick Start
+
+### Get Move Hints
 
 ```typescript
 import { buildHintContextFromGame, gnubgHints } from '@nodots-llc/backgammon-ai'
@@ -68,83 +175,91 @@ const game: BackgammonGame = /* obtain current game state */
 const { request } = buildHintContextFromGame(game)
 const [bestHint] = await gnubgHints.getMoveHints(request)
 
-console.log('Top-ranked move sequence:', bestHint?.moves)
+console.log('Best move sequence:', bestHint?.moves)
 console.log('Equity:', bestHint?.equity)
 ```
 
-## GNU Backgammon Hints Integration
-
-As of v4.1, this package relies on the `@nodots-llc/gnubg-hints` native addon instead of bundling the entire GNU Backgammon source tree. The addon wraps GNU Backgammon's evaluation engine through N-API and ships with TypeScript definitions.
-
-### Requirements
-
-- Node.js 18+
-- A working [node-gyp](https://github.com/nodejs/node-gyp) toolchain (Python 3, make, and a C/C++ compiler)
-- Platform-specific build tools (e.g., `xcode-select --install` on macOS, `build-essential` on Debian/Ubuntu)
-
-### Installation
-
-```bash
-npm install @nodots-llc/backgammon-ai
-```
-
-The native addon is compiled during installation; no additional scripts are required.
-
-### Advanced configuration
+### Select Best Move
 
 ```typescript
-import {
-  configureGnubgHints,
-  initializeGnubgHints,
-} from '@nodots-llc/backgammon-ai'
+import { selectBestMove } from '@nodots-llc/backgammon-ai'
+import type { BackgammonPlayMoving } from '@nodots-llc/backgammon-types'
 
-await initializeGnubgHints({ weightsPath: '/path/to/gnubg.weights' })
-configureGnubgHints({ evalPlies: 2, moveFilter: 3 })
+const bestMove = await selectBestMove(play as BackgammonPlayMoving, 'gbg-bot')
 ```
 
-- `weightsPath` lets you supply custom neural-network weights.
-- `configureGnubgHints` mirrors the tuning options provided by the addon (plies, move filters, pruning, etc.).
+---
 
-### Troubleshooting
+## Move Selection System
 
-- Review `gnubgHints.getBuildInstructions()` for platform-specific guidance.
-- Rebuild manually with `npx node-gyp rebuild --ansi`.
-- Consult the [`@nodots-llc/gnubg-hints` README](https://www.npmjs.com/package/@nodots-llc/gnubg-hints) for detailed setup notes.
+The move selection system uses a priority-based strategy cascade:
 
-## Plugin System & AI Analyzers
+```
+┌───────────────────────────────────────────────────┐
+│            selectBestMove(play, robotId)          │
+└─────────────────────┬─────────────────────────────┘
+                      │
+                      ▼
+┌───────────────────────────────────────────────────┐
+│  1. GNU Backgammon Structured Hints               │
+│     (Required for gbg-bot, preferred for all)     │
+│     - Equity-ranked move candidates               │
+│     - Win/gammon/backgammon probabilities         │
+└─────────────────────┬─────────────────────────────┘
+                      │ fallback
+                      ▼
+┌───────────────────────────────────────────────────┐
+│  2. Opening Book                                  │
+│     - Predefined best moves for opening rolls     │
+│     - Fast lookup, no computation                 │
+└─────────────────────┬─────────────────────────────┘
+                      │ fallback
+                      ▼
+┌───────────────────────────────────────────────────┐
+│  3. Strategic Heuristics                          │
+│     - Prefers advancing moves                     │
+│     - Safety and offense evaluation               │
+└─────────────────────┬─────────────────────────────┘
+                      │ fallback
+                      ▼
+┌───────────────────────────────────────────────────┐
+│  4. First Available Move                          │
+│     - Ultimate fallback                           │
+└───────────────────────────────────────────────────┘
+```
 
-### 🔌 **Revolutionary Plugin Architecture**
+---
 
-Version 3.5.0 introduces a **groundbreaking plugin system** that transforms ai into an **open, extensible platform** for backgammon AI development. The plugin system enables developers to create, share, and integrate diverse AI strategies seamlessly.
+## Plugin System
 
-### **Built-in Analyzers**
+### Built-in Analyzers
 
-| Analyzer                        | Strategy                           | Use Case                                        |
-| ------------------------------- | ---------------------------------- | ----------------------------------------------- |
-| **RandomMoveAnalyzer**          | Random selection                   | Testing, baseline comparison                    |
-| **FurthestFromOffMoveAnalyzer** | Maximize distance from bearing off | Defensive/blocking strategies                   |
-| **ExamplePluginAnalyzer**       | Template for developers            | Plugin development starting point               |
-| **GnubgMoveAnalyzer**           | GNU Backgammon integration         | World-class AI analysis                         |
-| **NodotsAIMoveAnalyzer**        | Strategic heuristics engine        | Intelligent gameplay with safety/offense/racing |
+| Analyzer | Strategy | Use Case |
+|----------|----------|----------|
+| `RandomMoveAnalyzer` | Random selection | Testing, baseline |
+| `FurthestFromOffMoveAnalyzer` | Maximize distance | Defensive/blocking |
+| `NodotsAIMoveAnalyzer` | Strategic heuristics | Intelligent gameplay |
+| `GnubgMoveAnalyzer` | GNU Backgammon | World-class analysis |
+| `ExamplePluginAnalyzer` | Template | Plugin development |
 
-### **Using Different Analyzers**
+### Using Analyzers
 
 ```typescript
 import {
   NodotsAIMoveAnalyzer,
   GnubgMoveAnalyzer,
-  RandomMoveAnalyzer,
-  selectMoveFromList,
+  selectMoveFromList
 } from '@nodots-llc/backgammon-ai'
 
-// Choose analyzer based on game context
-const analyzer =
-  difficulty === 'expert' ? new GnubgMoveAnalyzer() : new NodotsAIMoveAnalyzer()
+// Choose analyzer based on difficulty
+const analyzer = difficulty === 'expert'
+  ? new GnubgMoveAnalyzer()
+  : new NodotsAIMoveAnalyzer()
 
 const bestMove = await selectMoveFromList(moves, analyzer)
 ```
 
-### **Creating Custom Analyzers**
+### Creating Custom Analyzers
 
 ```typescript
 import { MoveAnalyzer, MoveAnalyzerContext } from '@nodots-llc/backgammon-ai'
@@ -155,7 +270,6 @@ export class MyCustomAnalyzer implements MoveAnalyzer {
     moves: BackgammonMoveBase[],
     context?: MoveAnalyzerContext
   ): Promise<BackgammonMoveBase | null> {
-    // Your custom AI logic here
     // Access board state: context?.board
     // Access position ID: context?.positionId
 
@@ -169,183 +283,163 @@ export class MyCustomAnalyzer implements MoveAnalyzer {
 export default MyCustomAnalyzer
 ```
 
-### **Dynamic Plugin Loading**
+### Dynamic Plugin Loading
 
 ```typescript
 import { loadAnalyzersFromPluginsDir } from '@nodots-llc/backgammon-ai'
 
-// Load all analyzers from a directory
-const analyzers = loadAnalyzersFromPluginsDir('./my-plugins')
-
-// Use any loaded analyzer
-const move = await analyzers['myCustomAnalyzer'].selectMove(moves, {
-  positionId: 'gJ/4AFjgc3AEO',
-  board: currentBoard,
-})
+const analyzers = await loadAnalyzersFromPluginsDir('./my-plugins')
+const move = await analyzers['myCustomAnalyzer'].selectMove(moves, context)
 ```
-
-### **Nodots AI Engine - Strategic Heuristics**
-
-The new **NodotsAIMoveAnalyzer** implements intelligent move selection with a three-tier strategy system:
-
-```typescript
-import { NodotsAIMoveAnalyzer } from '@nodots-llc/backgammon-ai'
-
-const nodotsAI = new NodotsAIMoveAnalyzer()
-
-// The AI prioritizes:
-// 1. Safety: Creating points, escaping blots
-// 2. Offense: Attacking opponent blots, blocking
-// 3. Racing: Advancing checkers efficiently
-
-const bestMove = await nodotsAI.selectMove(moves, context)
-```
-
-### **Plugin Development Template**
-
-1. **Create your analyzer class:**
-
-```typescript
-// plugins/myAnalyzer.ts
-import { MoveAnalyzer, MoveAnalyzerContext } from '@nodots-llc/backgammon-ai'
-
-export class MyAnalyzer implements MoveAnalyzer {
-  async selectMove(moves, context) {
-    // Your logic here
-    return moves[0] || null
-  }
-}
-
-export default MyAnalyzer
-```
-
-2. **Load and use it:**
-
-```typescript
-import { loadAnalyzersFromPluginsDir } from '@nodots-llc/backgammon-ai'
-const analyzers = loadAnalyzersFromPluginsDir('./plugins')
-const move = await analyzers['myAnalyzer'].selectMove(moves, context)
-```
-
-### **Community & Openness**
-
-The plugin system embodies our commitment to **open development**:
-
-- 🔓 **Open Architecture**: No vendor lock-in, switch AI engines seamlessly
-- 🌐 **Community-Driven**: Easy contribution of new analyzers
-- 🧪 **Experimentation-Friendly**: Test strategies without code changes
-- 📚 **Template-Based**: Standardized interfaces for easy development
-- 🚀 **Innovation Platform**: Framework for AI research and development
 
 ---
 
-## Usage
+## GNU Backgammon Integration
 
-### Retrieving structured hints
-
-```typescript
-import {
-  buildHintContextFromGame,
-  gnubgHints,
-} from '@nodots-llc/backgammon-ai'
-
-const { request } = buildHintContextFromGame(gameState)
-const [topHint] = await gnubgHints.getMoveHints(request, 5)
-
-console.log('Top candidate moves:', topHint?.moves)
-console.log('Equity:', topHint?.equity)
-```
-
-### Selecting moves via analyzers
+### Hint Request Format
 
 ```typescript
-import { selectBestMove } from '@nodots-llc/backgammon-ai'
-import type { BackgammonPlayMoving } from '@nodots-llc/backgammon-types'
-
-const bestMove = await selectBestMove(play as BackgammonPlayMoving, 'gbg-bot')
-```
-1. 24/20 16/13    Eq: +0.466 ⭐ BEST MOVE
-   Win: 59.5%, Gammon: 22.5%, Backgammon: 2.4%
-
-2. 24/21 24/20    Eq: +0.434 (-0.032)
-   Win: 58.7%, Gammon: 22.8%, Backgammon: 2.5%
-
-3. 24/20 13/10    Eq: +0.414 (-0.052)
-   Win: 58.2%, Gammon: 22.9%, Backgammon: 2.9%
+interface HintRequest {
+  positionId: string     // GNU Position ID
+  roll: [number, number] // Dice values
+}
 ```
 
-## Development
+### Getting Hints
 
-### Setup
+```typescript
+import { gnubgHints } from '@nodots-llc/backgammon-ai'
 
-1. Clone the repository:
+// Move hints
+const moveHints = await gnubgHints.getMoveHints(request, 5) // top 5 moves
+
+// Cube hints
+const cubeHints = await gnubgHints.getCubeHints(request)
+
+// Take hints
+const takeHints = await gnubgHints.getTakeHints(request)
+```
+
+### Hint Response
+
+```typescript
+interface MoveHint {
+  moves: Array<{ from: number; to: number }>
+  equity: number
+  winProb: number
+  gammonProb: number
+  backgammonProb: number
+}
+```
+
+### Configuration
+
+```typescript
+import { configureGnubgHints, initializeGnubgHints } from '@nodots-llc/backgammon-ai'
+import { MoveFilterSetting } from '@nodots-llc/gnubg-hints'
+
+// Initialize with custom weights
+await initializeGnubgHints({ weightsPath: '/path/to/gnubg.weights' })
+
+// Configure evaluation
+configureGnubgHints({
+  evalPlies: 2,
+  moveFilter: MoveFilterSetting.Large
+})
+```
+
+---
+
+## Robot Execution
+
+### Execute Robot Turn
+
+```typescript
+import { executeRobotTurn } from '@nodots-llc/backgammon-ai'
+
+const result = await executeRobotTurn(game, robotId)
+
+if (result.success) {
+  console.log('Robot completed turn')
+  console.log('Updated game:', result.game)
+  console.log('Telemetry:', result.telemetry)
+}
+```
+
+### Telemetry Data
+
+```typescript
+interface AITelemetryStep {
+  positionId: string
+  roll: [number, number]
+  rollSource: 'activePlayer.dice.currentRoll' | 'fallback'
+  planLength: number
+  planIndex: number
+  planSource: 'gnubg' | 'heuristic' | 'fallback'
+  hintCount: number
+  mappedOriginId: string
+  mappingStrategy: string
+  mappingOutcome: 'success' | 'fallback' | 'override'
+  singleDieRemaining: boolean
+  override?: {
+    reasonCode: string
+    reasonText: string
+  }
+}
+```
+
+---
+
+## Testing
 
 ```bash
-git clone https://github.com/nodots/ai.git
-cd ai
-```
-
-2. Install dependencies:
-
-```bash
-npm install
-```
-
-3. Verify functionality:
-
-```bash
+# Run all tests
 npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
+
+# Build
 npm run build
+
+# Lint
+npm run lint
+npm run lint:fix
 ```
 
-### Available Scripts
+---
 
-- `npm run build` - Build the TypeScript project
-- `npm run test` - Run tests
-- `npm run test:watch` - Run tests in watch mode
-- `npm run test:coverage` - Run tests with coverage report
-- `npm run lint` - Run ESLint
-- `npm run lint:fix` - Fix ESLint issues
-- `npm run clean` - Clean build artifacts
+## Compatibility
 
-## Verified Compatibility
+- macOS 14+ (Apple Silicon)
+- Linux (x64, arm64)
+- Node.js 18+
+- TypeScript 5.7+
 
-- ✅ **macOS 14.5.0** (Apple Silicon)
-- ✅ **GNU Backgammon 1.08.003**
-- ✅ **Node.js 18+**
-- ✅ **TypeScript 5.7+**
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Build fails with GTK errors**: Use minimal configuration (already set in npm scripts)
-2. **readline errors on macOS**: Fixed in v3.1.0 with compatibility patches
-3. **Native build fails**: Ensure a working node-gyp toolchain (`python3`, `make`, and a C/C++ compiler)
-
-### Getting Help
-
-3. Test integration: `npm test`
+---
 
 ## License
 
-This project is licensed under the MIT License.
+MIT License
 
-## Author
+Copyright (c) 2025 Ken Riley <kenr@nodots.com>
 
-Ken Riley <kenr@nodots.com>
+## Related Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Position ID Encoding](../../docs/POSITION_ID_ENCODING.md) | GNU Position ID format and encoding |
+| [Type System Guide](../../docs/TYPE_SYSTEM_GUIDE.md) | Understanding game types and state |
+| [Game State Diagram](../../docs/GAME_STATE_DIAGRAM.md) | Visual state machine diagrams |
+| [Getting Started](../../docs/GETTING_STARTED.md) | Setup guide for the full ecosystem |
+| [Contributing](../../CONTRIBUTING.md) | Development guidelines and PR process |
+
+---
 
 ## Acknowledgments
 
-- **GNU Backgammon Team**: For the excellent gnubg engine and analysis capabilities
-- **GNU Project**: For maintaining and developing gnubg as free software
-- **Backgammon Community**: For continued development and testing of gnubg
-
-> Minor README refresh.
-
-## Package split
-- New MIT core: @nodots-llc/backgammon-ai-core
-- Optional GNU adapter (GPL): @nodots-llc/backgammon-ai-gnubg
-
-Migration:
-- Install ai-core and (optionally) ai-gnubg & gnubg-hints
+- **GNU Backgammon Team** - For the excellent gnubg engine
+- **GNU Project** - For maintaining gnubg as free software

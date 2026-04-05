@@ -85,3 +85,5 @@ gnubg/po/Makefile.in
 gnubg/po/POTFILES
 gnubg/po/stamp-po
 gnubg/doc/Makefile 
+
+.claude/

@@ -10,14 +10,27 @@
 import { jest } from '@jest/globals'
 
 // Mock the gnubg-hints module
-const getHintsFromPositionIdMock = jest.fn().mockResolvedValue([])
 const initializeMock = jest.fn().mockResolvedValue(undefined)
+const getMoveHintsMock = jest.fn().mockResolvedValue([])
 
 jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
   GnuBgHints: {
     initialize: initializeMock,
-    getHintsFromPositionId: getHintsFromPositionIdMock,
+    getMoveHints: getMoveHintsMock,
   },
+  createHintRequestFromGame: () => ({
+    board: { points: [], bar: {}, off: {} },
+    dice: [0, 0],
+    activePlayerColor: 'black',
+    activePlayerDirection: 'clockwise',
+    cubeValue: 1,
+    cubeOwner: null,
+    matchScore: [0, 0],
+    matchLength: 0,
+    crawford: false,
+    jacoby: false,
+    beavers: false,
+  }),
 }))
 
 // Import under test after mock
@@ -31,7 +44,24 @@ const makeGame = (pid: string) => ({
   stateKind: 'moving',
   gnuPositionId: pid,
   board: { points: [], bar: { clockwise: { checkers: [] }, counterclockwise: { checkers: [] } }, off: { clockwise: { checkers: [] }, counterclockwise: { checkers: [] } } },
-  players: [],
+  players: [
+    {
+      id: 'player-black',
+      color: 'black',
+      direction: 'clockwise',
+      stateKind: 'moving',
+      isRobot: true,
+      dice: { stateKind: 'inactive', color: 'black' },
+    },
+    {
+      id: 'player-white',
+      color: 'white',
+      direction: 'counterclockwise',
+      stateKind: 'inactive',
+      isRobot: false,
+      dice: { stateKind: 'inactive', color: 'white' },
+    },
+  ],
   activeColor: 'black',
   activePlayer: {
     color: 'black',
@@ -49,19 +79,17 @@ const makeGame = (pid: string) => ({
   },
 }) as any
 
-describe('executeRobotTurnWithGNU - canonical PID usage', () => {
-  it('calls getHintsFromPositionId with the original gnuPositionId', async () => {
+describe('executeRobotTurnWithGNU - hint request shape', () => {
+  it('requests move hints with active player direction', async () => {
     const PID = 'Og4AAN9rAwAgAA'
     const game = makeGame(PID)
 
-    await expect(executeRobotTurnWithGNU(game)).rejects.toThrow(/returned no moves/i)
+    await expect(executeRobotTurnWithGNU(game)).rejects.toThrow(/returned no hints/i)
 
     expect(initializeMock).toHaveBeenCalled()
-    expect(getHintsFromPositionIdMock).toHaveBeenCalled()
-
-    // First call should use the original PID exactly
-    const firstCallArgs = getHintsFromPositionIdMock.mock.calls[0]
-    expect(firstCallArgs[0]).toBe(PID)
+    expect(getMoveHintsMock).toHaveBeenCalled()
+    const firstCallArgs = getMoveHintsMock.mock.calls[0]
+    expect(firstCallArgs[0]?.activePlayerColor).toBe('black')
+    expect(firstCallArgs[0]?.activePlayerDirection).toBe('clockwise')
   })
 })
-
