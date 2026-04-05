@@ -6,24 +6,14 @@
 import type {
   BackgammonPlayMoving,
   BackgammonMoveReady,
-  BackgammonCheckerContainer,
   BackgammonMoveDirection,
 } from '@nodots-llc/backgammon-types';
-import type { MoveHint, MoveStep } from '@nodots-llc/gnubg-hints';
 import type { GnubgColor } from './hintContext.js';
-import {
-  buildHintContextFromPlay,
-  getContainerKind,
-  getNormalizedPosition,
-} from './hintContext.js';
+import { getNormalizedPosition } from './hintContext.js';
 
-// Map direction to GnubgColor for getNormalizedPosition, which reads
-// position.clockwise when color is 'white' and position.counterclockwise
-// when color is 'black'.
 function directionToGnuColor(dir: BackgammonMoveDirection): GnubgColor {
   return dir === 'clockwise' ? 'white' : 'black';
 }
-import { gnubgHints } from './gnubg.js';
 // Optional policy model support (not required for baseline build)
 let selectMoveWithPolicy: ((play: BackgammonPlayMoving, model: any) => BackgammonMoveReady | undefined) | null = null
 async function tryLoadPolicyModel() {
@@ -54,15 +44,12 @@ const logger = {
 }
 
 /**
- * Main AI move selection function that tries multiple strategies in order:
- * 1. GNU Backgammon AI (required for gbg-bot, optional for others)
- * 2. Opening book for common opening rolls
- * 3. Strategic heuristics
- * 4. Random selection (fallback)
+ * Heuristic move selection: opening book -> trained policy -> strategic heuristics.
+ * Used by NodotsAIProvider. GNU routing is handled by the plugin registry,
+ * not by this function.
  */
 export async function selectBestMove(
   play: BackgammonPlayMoving,
-  playerNickname?: string
 ): Promise<BackgammonMoveReady | undefined> {
   const movesArray = Array.isArray(play.moves)
     ? play.moves
@@ -72,120 +59,32 @@ export async function selectBestMove(
   const readyMoves = (movesArray as BackgammonMoveReady[]).filter(
     (move): move is BackgammonMoveReady => move.stateKind === 'ready'
   )
-  
+
   if (readyMoves.length === 0) return undefined
 
-  // Determine identity. For now, only two robots exist: gbg-bot and nbg-bot-v1.
-  // Core currently passes userId here, not nickname. Hardcode detection by name or id.
-  const passedIdentifier = playerNickname || ''
-  const playerUserId = (play as any)?.player?.userId as string | undefined
-  const isRobot = !!(play as any)?.player?.isRobot
-
-  // Known mapping (hardcoded for current system):
-  // gbg-bot userId observed in logs/tests: da7eac85-cf8f-49f4-b97d-9f40d3171b36
-  const KNOWN_GBG_BOT_IDS = new Set<string>([
-    'da7eac85-cf8f-49f4-b97d-9f40d3171b36',
-  ])
-
-  const isGbgBot =
-    passedIdentifier === 'gbg-bot' ||
-    (playerUserId ? KNOWN_GBG_BOT_IDS.has(playerUserId) : false)
-
-  // With only two robots in the system, treat any other robot as nbg-bot-v1
-  const isNbgBot =
-    passedIdentifier === 'nbg-bot-v1' || (isRobot && !isGbgBot)
-
-  // Use a friendly name in logs
-  const robotName = isGbgBot ? 'gbg-bot' : isNbgBot ? 'nbg-bot-v1' : (passedIdentifier || playerUserId || 'Unknown Robot')
+  const robotName = 'Nodots AI'
   logger.info(`[AI] ${robotName} starting move selection with ${readyMoves.length} available moves`)
 
-  if (isGbgBot) {
-    logger.info(`[AI] ${robotName} AI Engine: GNU Backgammon (required)`);
-
-    const available = await gnubgHints.isAvailable();
-    if (!available) {
-      const instructions = gnubgHints.getBuildInstructions();
-      logger.error(
-        `[AI] ${robotName} GNU Backgammon hints unavailable — terminating turn selection`,
-      );
-      throw new Error(
-        `gbg-bot cannot function without GNU Backgammon hints.\n\n${instructions}`,
-      );
-    }
-
-    try {
-      const { request } = buildHintContextFromPlay(play);
-      logger.debug(
-        `[AI] ${robotName} requesting structured hints from @nodots-llc/gnubg-hints`,
-      );
-      const hints = await gnubgHints.getMoveHints(request, 10);
-
-      if (!Array.isArray(hints) || hints.length === 0) {
-        throw new Error('No move hints returned by @nodots-llc/gnubg-hints');
-      }
-
-      const matched = findMoveMatchingHints(readyMoves, hints, robotName);
-
-      if (matched) {
-        const { move, hint } = matched;
-        logger.info(
-          `[AI] ${robotName} Move selected via: GNU Backgammon Engine (hint rank ${hint.rank})`,
-        );
-        ;(move as any).__source = 'gnu-hint'
-        return move;
-      }
-      const hintSummary = hints
-        .slice(0, 3)
-        .map((hint) =>
-          (hint.moves || [])
-            .map((step) => `${step.from}:${step.to}:${step.fromContainer}->${step.toContainer}`)
-            .join(',')
-        )
-        .filter(Boolean);
-      throw new Error(
-        `GNU Backgammon hints did not match any legal moves for ${robotName} (hintSample=${JSON.stringify(
-          hintSummary
-        )})`,
-      );
-    } catch (error) {
-      logger.error(
-        `[AI] ${robotName} GNU Backgammon integration error: ${String(error)}`,
-      );
-      throw new Error(
-        `gbg-bot requires GNU Backgammon hints but the integration failed: ${error}`,
-      );
-    }
-  }
-
-  if (isNbgBot) {
-    logger.info(`[AI] ${robotName} AI Engine: Nodots AI (GNU BG excluded)`)
-
-    // Try trained policy first if available
-    try {
-      const modelDir = resolveModelDir();
-      const modelPath = modelDir ? path.join(modelDir, 'model.json') : undefined;
-      if (modelPath && fs.existsSync(modelPath)) {
-        const raw = fs.readFileSync(modelPath, 'utf-8');
-        const model = JSON.parse(raw);
-        const policy = await tryLoadPolicyModel()
-        if (policy) {
-          const policyMove = policy(play, model);
-          if (policyMove) {
-            logger.info(`[AI] ${robotName} Move selected via: Trained Policy`);
-            (policyMove as any).__source = 'policy';
-            return policyMove;
-          }
+  // Try trained policy first if available
+  try {
+    const modelDir = resolveModelDir();
+    const modelPath = modelDir ? path.join(modelDir, 'model.json') : undefined;
+    if (modelPath && fs.existsSync(modelPath)) {
+      const raw = fs.readFileSync(modelPath, 'utf-8');
+      const model = JSON.parse(raw);
+      const policy = await tryLoadPolicyModel()
+      if (policy) {
+        const policyMove = policy(play, model);
+        if (policyMove) {
+          logger.info(`[AI] ${robotName} Move selected via: Trained Policy`);
+          (policyMove as any).__source = 'policy';
+          return policyMove;
         }
-        logger.warn(`[AI] ${robotName} Policy available but no move matched; falling back`);
-      } else {
-        logger.debug(`[AI] ${robotName} No trained policy found (searched: ${modelPath || 'n/a'})`);
       }
-    } catch (err) {
-      logger.warn(`[AI] ${robotName} Policy load error: ${String(err)} (falling back)`);
+      logger.warn(`[AI] ${robotName} Policy available but no move matched; falling back`);
     }
-  } else {
-    // For other bots (not gbg-bot, not nbg-bot), indicate they use hybrid AI approach
-    logger.info(`[AI] ${robotName} AI Engine: Hybrid (Opening Book + Strategic Heuristics)`)
+  } catch (err) {
+    logger.warn(`[AI] ${robotName} Policy load error: ${String(err)} (falling back)`);
   }
 
   // Try opening book for opening positions
@@ -321,114 +220,6 @@ function extractDiceFromMoves(readyMoves: BackgammonMoveReady[]): number[] {
     }
   }
   return diceValues
-}
-
-/**
- * Extract position number from a checker container
- */
-function getPositionNumber(container: BackgammonCheckerContainer): number | null {
-  if (container.kind === 'point' && container.position && typeof container.position === 'object') {
-    // Type guard to check if it's a point position object
-    const position = container.position as any
-    if (position.clockwise !== undefined || position.counterclockwise !== undefined) {
-      // Use clockwise position as reference for now, fallback to counterclockwise
-      return position.clockwise || position.counterclockwise || null
-    }
-  }
-  return null
-}
-
-/**
- * Generate GNU Backgammon position ID from current play state
- * This creates a simplified position ID for GNU BG analysis
- */
-interface NormalizedMoveStep {
-  from: number;
-  to: number;
-  fromContainer: MoveStep['fromContainer'];
-  toContainer: MoveStep['toContainer'];
-}
-
-function normalizeMoveSkeleton(
-  move: BackgammonMoveReady,
-  direction: BackgammonMoveDirection,
-): NormalizedMoveStep[] {
-  if (!move.possibleMoves || move.possibleMoves.length === 0) {
-    return [];
-  }
-
-  const steps: NormalizedMoveStep[] = [];
-
-  for (const possibleMove of move.possibleMoves) {
-    const from = getNormalizedPosition(possibleMove.origin, directionToGnuColor(direction));
-    const to = getNormalizedPosition(possibleMove.destination, directionToGnuColor(direction));
-
-    if (from === null || to === null) {
-      continue;
-    }
-
-    steps.push({
-      from,
-      to,
-      fromContainer: getContainerKind(possibleMove.origin),
-      toContainer: getContainerKind(possibleMove.destination),
-    });
-  }
-
-  return steps;
-}
-
-function stepsMatch(hintStep: MoveStep, moveStep: NormalizedMoveStep): boolean {
-  return (
-    hintStep.from === moveStep.from &&
-    hintStep.to === moveStep.to &&
-    hintStep.fromContainer === moveStep.fromContainer &&
-    hintStep.toContainer === moveStep.toContainer
-  );
-}
-
-function findMoveMatchingHints(
-  readyMoves: BackgammonMoveReady[],
-  hints: MoveHint[],
-  robotName: string,
-): { move: BackgammonMoveReady; hint: MoveHint } | undefined {
-  for (const hint of hints) {
-    const targetStep = hint.moves[0];
-    if (!targetStep) {
-      continue;
-    }
-
-    for (const move of readyMoves) {
-      const direction = move.player?.direction as BackgammonMoveDirection | undefined;
-      if (!direction) {
-        continue;
-      }
-
-      const normalizedSteps = normalizeMoveSkeleton(move, direction);
-      const matchingStep = normalizedSteps.find((step) =>
-        stepsMatch(targetStep, step),
-      );
-      if (matchingStep) {
-        logger.debug(
-          `[AI] ${robotName} Matched hint step ${formatHintStep(targetStep)} to move ${formatMoveStep(matchingStep)}`,
-        );
-        return { move, hint };
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function formatHintStep(step: MoveStep): string {
-  return `${step.from}:${step.to}:${step.fromContainer}->${step.toContainer}`;
-}
-
-function formatMoveStep(step: NormalizedMoveStep | undefined): string {
-  if (!step) {
-    return 'unknown-move';
-  }
-  return `${step.from}:${step.to}:${step.fromContainer}->${step.toContainer}`;
 }
 
 function resolveModelDir(): string | undefined {
