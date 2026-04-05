@@ -1,9 +1,11 @@
 import type {
+  BackgammonBoard,
+  BackgammonChecker,
   BackgammonCheckerContainer,
   BackgammonColor,
   BackgammonGame,
-  BackgammonMoveDirection,
   BackgammonPlayMoving,
+  BackgammonPoints,
 } from '@nodots-llc/backgammon-types';
 import type {
   GameHintContextOverrides,
@@ -11,12 +13,175 @@ import type {
 } from '@nodots-llc/gnubg-hints';
 import { createHintRequestFromGame } from '@nodots-llc/gnubg-hints';
 
+export type GnubgColor = Exclude<BackgammonColor, undefined>;
+
+export interface GnubgColorNormalization {
+  toGnu: Record<GnubgColor, GnubgColor>;
+  fromGnu: Record<GnubgColor, GnubgColor>;
+}
+
 export interface PlayHintContext {
   request: HintRequest;
+  normalization: GnubgColorNormalization;
 }
 
 export interface GameHintContext {
   request: HintRequest;
+  normalization: GnubgColorNormalization;
+}
+
+function createColorNormalization(
+  clockwiseColor: GnubgColor,
+  counterClockwiseColor: GnubgColor,
+): GnubgColorNormalization {
+  return {
+    toGnu: {
+      [clockwiseColor]: 'white',
+      [counterClockwiseColor]: 'black',
+    } as Record<GnubgColor, GnubgColor>,
+    fromGnu: {
+      white: clockwiseColor,
+      black: counterClockwiseColor,
+    },
+  };
+}
+
+function normalizeChecker(
+  checker: BackgammonChecker,
+  colorMap: Record<GnubgColor, GnubgColor>,
+): BackgammonChecker {
+  const mappedColor = colorMap[checker.color] ?? checker.color;
+  if (mappedColor === checker.color) {
+    return checker;
+  }
+
+  return {
+    ...checker,
+    color: mappedColor,
+  };
+}
+
+function normalizeCheckerArray(
+  checkers: BackgammonChecker[] | undefined,
+  colorMap: Record<GnubgColor, GnubgColor>,
+): BackgammonChecker[] {
+  if (!Array.isArray(checkers)) {
+    return [];
+  }
+  return checkers.map((checker) => normalizeChecker(checker, colorMap));
+}
+
+export function normalizeBoardForHints(
+  board: BackgammonBoard,
+  colorMap: Record<GnubgColor, GnubgColor>,
+): BackgammonBoard {
+  return {
+    id: board.id,
+    points: board.points.map((point) => ({
+      id: point.id,
+      kind: 'point',
+      position: { ...point.position },
+      checkers: normalizeCheckerArray(point.checkers, colorMap),
+    })) as BackgammonPoints,
+    bar: {
+      clockwise: {
+        ...board.bar.clockwise,
+        checkers: normalizeCheckerArray(
+          board.bar.clockwise?.checkers,
+          colorMap,
+        ),
+      },
+      counterclockwise: {
+        ...board.bar.counterclockwise,
+        checkers: normalizeCheckerArray(
+          board.bar.counterclockwise?.checkers,
+          colorMap,
+        ),
+      },
+    },
+    off: {
+      clockwise: {
+        ...board.off.clockwise,
+        checkers: normalizeCheckerArray(
+          board.off.clockwise?.checkers,
+          colorMap,
+        ),
+      },
+      counterclockwise: {
+        ...board.off.counterclockwise,
+        checkers: normalizeCheckerArray(
+          board.off.counterclockwise?.checkers,
+          colorMap,
+        ),
+      },
+    },
+  }
+}
+
+function deriveNormalizationFromGame(game: BackgammonGame): GnubgColorNormalization {
+  const clockwisePlayer = game.players.find(
+    (player) => player.direction === 'clockwise',
+  );
+  const counterPlayer = game.players.find(
+    (player) => player.direction === 'counterclockwise',
+  );
+
+  if (!clockwisePlayer || !counterPlayer) {
+    throw new Error('Unable to determine player directions for GNU BG normalization.');
+  }
+
+  return createColorNormalization(clockwisePlayer.color, counterPlayer.color);
+}
+
+function deriveNormalizationFromPlay(play: BackgammonPlayMoving): GnubgColorNormalization {
+  const activeColor = play.player.color;
+  const opponentColor: GnubgColor = activeColor === 'white' ? 'black' : 'white';
+
+  if (play.player.direction === 'clockwise') {
+    return createColorNormalization(activeColor, opponentColor);
+  }
+
+  return createColorNormalization(opponentColor, activeColor);
+}
+
+function normalizeMatchScore(
+  game: BackgammonGame,
+  colorMap: Record<GnubgColor, GnubgColor>,
+): [number, number] {
+  const rawScore =
+    (game as any)?.matchScore ??
+    (game as any)?.metadata?.matchScore ??
+    (game as any)?.metadata?.matchInfo?.matchScore ??
+    (game as any)?.matchInfo?.matchScore
+
+  const whiteScore = rawScore?.white ?? 0
+  const blackScore = rawScore?.black ?? 0
+
+  const mapped: [number, number] = [0, 0]
+
+  const assign = (actualColor: GnubgColor, value: number) => {
+    const gnuColor = colorMap[actualColor] ?? actualColor
+    if (gnuColor === 'white') {
+      mapped[0] = value
+    } else {
+      mapped[1] = value
+    }
+  }
+
+  assign('white', whiteScore)
+  assign('black', blackScore)
+
+  return mapped
+}
+
+function normalizeCubeOwner(
+  owner: BackgammonColor | undefined,
+  colorMap: Record<GnubgColor, GnubgColor>,
+): GnubgColor | null {
+  if (!owner) {
+    return null;
+  }
+  return colorMap[owner] ?? owner;
 }
 
 function deriveDiceFromPlay(play: BackgammonPlayMoving): [number, number] {
@@ -30,18 +195,13 @@ function deriveDiceFromPlay(play: BackgammonPlayMoving): [number, number] {
 export function buildHintContextFromPlay(
   play: BackgammonPlayMoving,
 ): PlayHintContext {
-  const direction = play.player?.direction as BackgammonMoveDirection | undefined;
-  if (!direction) {
-    throw new Error('Unable to determine active player direction for GNU hints.');
-  }
-
-  const activeColor: BackgammonColor = play.player?.color ?? 'white';
+  const normalization = deriveNormalizationFromPlay(play);
+  const board = normalizeBoardForHints(play.board, normalization.toGnu);
 
   const request: HintRequest = {
-    board: play.board,
+    board,
     dice: deriveDiceFromPlay(play),
-    activePlayerColor: activeColor,
-    activePlayerDirection: direction,
+    activePlayerDirection: play.player.direction,
     cubeValue: 1,
     cubeOwner: null,
     matchScore: [0, 0],
@@ -51,33 +211,42 @@ export function buildHintContextFromPlay(
     beavers: false,
   };
 
-  return { request };
+  return { request, normalization };
 }
 
 export function buildHintContextFromGame(
   game: BackgammonGame,
   overrides: GameHintContextOverrides = {},
 ): GameHintContext {
-  const activePlayerColor: BackgammonColor =
-    overrides.activePlayerColor ?? game.activePlayer?.color ?? 'white';
-  const activePlayerDirection =
-    overrides.activePlayerDirection ?? game.activePlayer?.direction;
-  if (!activePlayerDirection) {
-    throw new Error('Unable to determine active player direction for GNU hints.');
-  }
+  const normalization = deriveNormalizationFromGame(game);
+  const normalizedBoard = normalizeBoardForHints(game.board, normalization.toGnu);
+
+  // Normalize activePlayerColor through the same color map used for the board.
+  // Without this, a game where clockwise=BLACK passes 'black' as the active
+  // color even though the board has been remapped so clockwise checkers are
+  // 'white'. This causes convertBoardToGnuBg to select the wrong player's
+  // checkers via rollIsWhite.
+  const normalizedActivePlayerColor = overrides.activePlayerColor
+    ? normalization.toGnu[overrides.activePlayerColor]
+    : undefined;
 
   const request = createHintRequestFromGame(game, {
     ...overrides,
-    activePlayerColor,
-    activePlayerDirection,
+    board: normalizedBoard,
+    activePlayerColor: normalizedActivePlayerColor,
+    cubeOwner:
+      overrides.cubeOwner ??
+      normalizeCubeOwner(game.cube?.owner?.color, normalization.toGnu),
+    matchScore:
+      overrides.matchScore ?? normalizeMatchScore(game, normalization.toGnu),
   });
 
-  return { request };
+  return { request, normalization };
 }
 
 export function getNormalizedPosition(
   container: BackgammonCheckerContainer | undefined,
-  direction: BackgammonMoveDirection,
+  normalizedColor: GnubgColor,
 ): number | null {
   if (!container) {
     return null;
@@ -89,11 +258,12 @@ export function getNormalizedPosition(
 
   if (container.kind === 'point') {
     const position = container.position;
-    if (position && typeof position === 'object') {
-      const index = (position as unknown as Record<string, number>)[direction];
-      if (typeof index === 'number') {
-        return index;
-      }
+    if (typeof position === 'object' && position !== null) {
+      const value =
+        normalizedColor === 'white'
+          ? (position as { clockwise?: number }).clockwise
+          : (position as { counterclockwise?: number }).counterclockwise
+      return typeof value === 'number' ? value : null;
     }
   }
 

@@ -5,6 +5,7 @@ import type {
   MoveHint,
   TakeHint,
 } from '@nodots-llc/gnubg-hints';
+import type { BackgammonColor, BackgammonMoveDirection } from '@nodots-llc/backgammon-types';
 
 type GnubgHintsModule = any;
 type GnubgHintsHandle = any;
@@ -111,18 +112,20 @@ export class GnubgHintsIntegration {
     positionId: string,
     dice: [number, number],
     maxHints?: number,
+    activePlayerDirection?: BackgammonMoveDirection,
+    activePlayerColor?: BackgammonColor,
   ): Promise<MoveHint[]> {
     const addon = await this.ensureInitialized();
     if (typeof addon.getHintsFromPositionId === 'function') {
-      return addon.getHintsFromPositionId(positionId, dice, maxHints);
+      return addon.getHintsFromPositionId(positionId, dice, maxHints, activePlayerDirection, activePlayerColor);
     }
     // Fallback: synthesize a minimal request (less preferred path)
     const request: HintRequest = {
       // The addon will ignore board in this path; provide empty structure
       board: { id: 'unknown', points: [], bar: {} as any, off: {} as any } as any,
       dice,
-      activePlayerColor: 'white',
-      activePlayerDirection: 'clockwise',
+      activePlayerColor: activePlayerColor ?? 'white',
+      activePlayerDirection: activePlayerDirection ?? 'clockwise',
       cubeValue: 1,
       cubeOwner: null,
       matchScore: [0, 0],

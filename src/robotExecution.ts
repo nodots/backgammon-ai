@@ -144,6 +144,7 @@ const skillConfigToHintConfig = (skill: SkillConfig): Partial<HintConfig> => {
     evalPlies: skill.evalPlies ?? 2,
     moveFilter: skill.moveFilter ?? 2,
     usePruning: skill.usePruning ?? true,
+    noise: skill.noise ?? 0,
   }
 }
 
@@ -218,12 +219,11 @@ export const executeRobotTurnWithGNU = async (
       'clockwise'
     const activePlayerColor =
       ((currentGame.activePlayer as any)?.color as BackgammonColor) ?? 'white'
-    const noiseLevel = skillConfig?.noise ?? 0
-    const maxHints = noiseLevel > 0 ? 5 : 1
+    // GNU rNoise is the sole noise mechanism -- always request 1 hint
     const hints = await GnuBgHints.getHintsFromPositionId(
       planPositionId,
       currentRoll,
-      maxHints,
+      1,
       activePlayerDirection,
       activePlayerColor
     )
@@ -231,15 +231,7 @@ export const executeRobotTurnWithGNU = async (
       return []
     }
 
-    let selectedHintIndex = 0
-    if (noiseLevel > 0 && hints.length > 1 && Math.random() < noiseLevel) {
-      const maxIndex = Math.min(hints.length - 1, Math.floor(noiseLevel * 5) + 1)
-      selectedHintIndex = Math.floor(Math.random() * (maxIndex + 1))
-      logger.info('[AI] Noise applied: selected hint #%d of %d (noise: %s)',
-        selectedHintIndex + 1, hints.length, noiseLevel)
-    }
-    const hint = hints[selectedHintIndex]
-    return hint?.moves || []
+    return hints[0]?.moves || []
   }
 
   // Get plan ONCE before the loop (true one-shot planning to avoid die-tracking bug #250)
@@ -563,18 +555,35 @@ export const executeRobotTurnWithGNU = async (
     const preExecState = workingGame.stateKind
     const preExecMoveCount = ((workingGame.activePlay?.moves || []) as any[]).filter((m: any) => m.stateKind === 'ready').length
 
-    // Log what we're about to execute vs what GNU planned
+    // Extract the actual CORE positions for the move we're about to execute.
+    // These are the authoritative source for history recording (not the GNU plan).
     const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
-    let execOriginPos: number | undefined
-    let execDestPos: number | undefined
+    let execOriginPos: number | 'bar' | undefined
+    let execDestPos: number | 'off' | undefined
     let execDie: number | undefined
+    let execMoveKind: string | undefined
+    let execIsHit = false
     for (const m of ready) {
       if (!Array.isArray((m as any).possibleMoves)) continue
       for (const pm of (m as any).possibleMoves) {
         if ((pm as any)?.origin?.id === originIdToUse) {
-          execOriginPos = (pm as any)?.origin?.position?.[dir]
-          execDestPos = (pm as any)?.destination?.position?.[dir]
+          const org = (pm as any)?.origin
+          const dst = (pm as any)?.destination
+          if (org?.kind === 'bar') {
+            execOriginPos = 'bar'
+            execMoveKind = 'reenter'
+          } else {
+            execOriginPos = org?.position?.[dir]
+            execMoveKind = 'point-to-point'
+          }
+          if (dst?.kind === 'off') {
+            execDestPos = 'off'
+            execMoveKind = 'bear-off'
+          } else {
+            execDestPos = dst?.position?.[dir]
+          }
           execDie = (m as any).dieValue
+          execIsHit = (m as any).isHit || false
           break
         }
       }
@@ -645,6 +654,12 @@ export const executeRobotTurnWithGNU = async (
       plannedFrom,
       plannedTo,
       plannedKind,
+      // Actual executed positions from CORE (authoritative for history recording)
+      executedFrom: execOriginPos,
+      executedTo: execDestPos,
+      executedDieValue: execDie,
+      executedMoveKind: execMoveKind,
+      executedIsHit: execIsHit,
       legalOriginIds,
       mappingStrategy: mappedOriginId
         ? (isPlanOriginLegal ? 'id' : 'position')
