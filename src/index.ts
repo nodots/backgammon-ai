@@ -1,19 +1,3 @@
-// Node version check - MUST be first, before any imports that trigger native addon loading
-const REQUIRED_NODE_MAJOR = 20;
-const currentMajor = parseInt(process.versions.node.split('.')[0], 10);
-if (currentMajor !== REQUIRED_NODE_MAJOR) {
-  console.error('\x1b[31m%s\x1b[0m', '╔═══════════════════════════════════════════════════════════════╗');
-  console.error('\x1b[31m%s\x1b[0m', '║  FATAL: Wrong Node.js version                                 ║');
-  console.error('\x1b[31m%s\x1b[0m', '╠═══════════════════════════════════════════════════════════════╣');
-  console.error('\x1b[31m%s\x1b[0m', `║  Required: Node.js ${REQUIRED_NODE_MAJOR}.x                                        ║`);
-  console.error('\x1b[31m%s\x1b[0m', `║  Current:  Node.js ${process.versions.node.padEnd(20)}                    ║`);
-  console.error('\x1b[31m%s\x1b[0m', '╠═══════════════════════════════════════════════════════════════╣');
-  console.error('\x1b[31m%s\x1b[0m', '║  The gnubg-hints native addon requires Node.js 20.            ║');
-  console.error('\x1b[31m%s\x1b[0m', '║  Fix: Run `nvm use 20` then try again.                        ║');
-  console.error('\x1b[31m%s\x1b[0m', '╚═══════════════════════════════════════════════════════════════╝');
-  process.exit(1);
-}
-
 import type { BackgammonMoveBase } from '@nodots-llc/backgammon-types';
 import type {
   DoubleHint,
@@ -33,18 +17,27 @@ let registered = false;
 export async function registerAIProvider(): Promise<void> {
   if (registered) return;
 
-  // Dynamic imports to break circular dependency (ESM-compatible)
   const { RobotAIRegistry } = await import('@nodots-llc/backgammon-core');
   const { GNUAIProvider } = await import('./GNUAIProvider.js');
+  const { NodotsAIProvider } = await import('./NodotsAIProvider.js');
 
-  RobotAIRegistry.register(new GNUAIProvider());
-  // Initialize and configure GNU hints once so execution and analysis share identical settings
+  const gnuProvider = new GNUAIProvider();
+  const nodotsProvider = new NodotsAIProvider();
+
+  // GNU robots: matched by email prefix from seed-robots.ts
+  RobotAIRegistry.register('gnu-*', gnuProvider);
+  RobotAIRegistry.register('gbg-bot@nodots.com', gnuProvider);
+  // Nodots heuristic bot
+  RobotAIRegistry.register('nbg-*', nodotsProvider);
+  // Fallback for any unrecognized robot
+  RobotAIRegistry.register('*', nodotsProvider);
+
+  // Initialize GNU hints engine
   try {
     await initializeGnubgHints({
       config: DEFAULT_HINTS_CONFIG,
     });
   } catch (err) {
-    // Non-fatal: consumers may initialize separately; log for visibility
     console.warn('[AI] gnubg-hints init/config skipped:', String(err));
   }
   registered = true;
@@ -117,6 +110,7 @@ export * from './hintContext.js';
 
 // Export AI provider implementations
 export { GNUAIProvider } from './GNUAIProvider.js';
+export { NodotsAIProvider } from './NodotsAIProvider.js';
 export { executeRobotTurnWithGNU } from './robotExecution.js';
 
 // Export luck analysis

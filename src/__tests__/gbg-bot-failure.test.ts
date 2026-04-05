@@ -1,5 +1,6 @@
 /**
- * Test that gbg-bot fails appropriately when GNU BG is unavailable
+ * Test that selectBestMove works as a heuristic selector
+ * (GNU routing is now handled by the plugin registry, not selectBestMove)
  */
 
 import type {
@@ -9,11 +10,9 @@ import type {
   BackgammonBoard,
 } from '@nodots-llc/backgammon-types'
 import { jest } from '@jest/globals'
-import { gnubgHints } from '../gnubg'
 import { selectBestMove } from '../moveSelection'
 
-const createMockPlay = (options?: { userId?: string; isRobot?: boolean }): BackgammonPlayMoving => {
-  const { userId = 'player-1', isRobot = true } = options ?? {}
+const createMockPlay = (): BackgammonPlayMoving => {
   const points = Array.from({ length: 24 }, (_, index) => ({
     id: `pt-${index + 1}`,
     kind: 'point' as const,
@@ -63,7 +62,7 @@ const createMockPlay = (options?: { userId?: string; isRobot?: boolean }): Backg
 
   const player = {
     id: 'player-1',
-    userId,
+    userId: 'test-user',
     color: 'white' as const,
     direction: 'clockwise' as const,
     stateKind: 'moving' as const,
@@ -75,7 +74,7 @@ const createMockPlay = (options?: { userId?: string; isRobot?: boolean }): Backg
       total: 5,
     },
     pipCount: 150,
-    isRobot,
+    isRobot: true,
     rollForStartValue: 3 as any,
   }
 
@@ -101,68 +100,23 @@ const createMockPlay = (options?: { userId?: string; isRobot?: boolean }): Backg
     id: 'play-1',
     stateKind: 'moving',
     player,
-    moves: new Set([move]) as any,
+    moves: [move],
     board,
   } as unknown as BackgammonPlayMoving
 }
 
-describe('gbg-bot GNU BG requirement', () => {
-  const gbgPlay = createMockPlay({
-    userId: 'da7eac85-cf8f-49f4-b97d-9f40d3171b36',
-    isRobot: true,
-  })
-  const nodotsPlay = createMockPlay({
-    userId: 'nbg-bot-user',
-    isRobot: true,
-  })
-
-  it('should fail when gbg-bot cannot access GNU Backgammon and log AI engine', async () => {
-    // Spy on logger to verify AI engine is logged (logger.info uses console.info)
-    const loggerInfoSpy = jest.spyOn(console, 'info').mockImplementation()
-    const loggerErrorSpy = jest.spyOn(console, 'error').mockImplementation()
-
-    jest.spyOn(gnubgHints, 'getMoveHints').mockImplementationOnce(() => {
-      throw new Error('Native addon unavailable')
-    })
-
-    await expect(selectBestMove(gbgPlay, 'gbg-bot')).rejects.toThrow(
-      /gbg-bot requires GNU Backgammon hints but the integration failed/i,
-    )
-
-    // Verify that the AI engine and failure were logged
-    expect(loggerInfoSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[INFO] [AI] gbg-bot starting move selection')
-    )
-    expect(loggerErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[ERROR] [AI] gbg-bot GNU Backgammon integration error')
-    )
-
-    loggerInfoSpy.mockRestore()
-    loggerErrorSpy.mockRestore()
-  })
-
-  it('should allow other bots to use fallback logic and log AI engine', async () => {
-    // Spy on logger to verify AI engine is logged (logger.info uses console.info)
-    const loggerSpy = jest.spyOn(console, 'info').mockImplementation()
-
-    const result = await selectBestMove(nodotsPlay, 'nbg-bot-v1')
+describe('selectBestMove heuristic selection', () => {
+  it('should select a ready move using heuristics', async () => {
+    const play = createMockPlay()
+    const result = await selectBestMove(play)
     expect(result).toBeDefined()
     expect(result?.stateKind).toBe('ready')
-
-    // Verify that the AI engine was logged
-    expect(loggerSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[INFO] [AI] nbg-bot-v1 AI Engine: Nodots AI (GNU BG excluded)')
-    )
-    expect(loggerSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[INFO] [AI] nbg-bot-v1 Move selected via: Strategic Heuristics')
-    )
-
-    loggerSpy.mockRestore()
   })
 
-  it('should work without player nickname (for backward compatibility)', async () => {
-    const result = await selectBestMove(nodotsPlay)
-    expect(result).toBeDefined()
-    expect(result?.stateKind).toBe('ready')
+  it('should return undefined for empty moves', async () => {
+    const play = createMockPlay()
+    play.moves = [] as any
+    const result = await selectBestMove(play)
+    expect(result).toBeUndefined()
   })
 })
