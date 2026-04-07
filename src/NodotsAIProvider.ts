@@ -55,7 +55,14 @@ export class NodotsAIProvider implements RobotAIProvider {
         break
       }
 
-      workingGame = Core.Game.executeAndRecalculate(workingGame, originId)
+      // Pass the destination and die value so planMoveExecution takes the
+      // exact-mode path. Without these options it falls into the non-exact
+      // branch that can throw "No legal moves available from origin X" when
+      // the planner picks the wrong die first.
+      workingGame = Core.Game.executeAndRecalculate(workingGame, originId, {
+        desiredDestinationId: firstPossible?.destination?.id,
+        expectedDieValue: bestMove.dieValue,
+      })
 
       if (workingGame.stateKind === 'completed') break
     }
