@@ -30,7 +30,9 @@ export class NodotsAIProvider implements RobotAIProvider {
     let guard = 8
 
     while (guard-- > 0 && workingGame.stateKind === 'moving') {
-      const moves = (workingGame.activePlay?.moves || []) as any[]
+      const moves = Array.isArray(workingGame.activePlay?.moves)
+        ? workingGame.activePlay.moves
+        : Array.from(workingGame.activePlay?.moves ?? [])
       const ready = moves.filter((m: any) => m.stateKind === 'ready')
 
       if (ready.length === 0) {
@@ -38,7 +40,20 @@ export class NodotsAIProvider implements RobotAIProvider {
         break
       }
 
+      // Refresh each ready move's possibleMoves from the CURRENT board.
+      // Stored possibleMoves can be stale after prior moves in the same
+      // turn changed the board. Without this refresh the AI can select
+      // an origin/destination that was valid on a previous board but is
+      // no longer legal, causing CORE to reject with "Invalid move".
       const play = workingGame.activePlay
+      for (const rm of ready) {
+        rm.possibleMoves = Core.Board.getPossibleMoves(
+          workingGame.board,
+          play.player,
+          rm.dieValue
+        )
+      }
+
       const bestMove = await selectBestMove(play)
 
       if (!bestMove) {
