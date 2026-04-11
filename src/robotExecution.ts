@@ -257,6 +257,18 @@ export const executeRobotTurnWithGNU = async (
       planIdx
     }) + '\n')
 
+    // Refresh possibleMoves for each ready move from the CURRENT board.
+    // Stored possibleMoves can be stale after prior moves in the same
+    // turn changed the board — same fix as NodotsAIProvider.
+    const BoardUtil = await getBoard()
+    for (const rm of ready) {
+      rm.possibleMoves = BoardUtil.getPossibleMoves(
+        workingGame.board,
+        workingGame.activePlay.player,
+        rm.dieValue
+      )
+    }
+
     // If no READY moves remain, let core decide turn completion
     if (ready.length === 0) {
       fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({ noReadyMoves: true, breakingLoop: true }) + '\n')
