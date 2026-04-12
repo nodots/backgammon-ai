@@ -28,6 +28,22 @@ export class NodotsAIProvider implements RobotAIProvider {
 
     let workingGame: any = game
     let guard = 8
+    // Telemetry: one entry per executed move so the API layer can
+    // reconstruct the turn for history recording + PR analysis. GNU
+    // sets this too; if either provider leaves it empty, robot move
+    // history stops getting recorded and PR can't run.
+    const telemetry: Array<Record<string, unknown>> = []
+
+    const posFromContainer = (
+      container: any,
+      direction: string
+    ): number | 'bar' | 'off' => {
+      if (!container) return 0
+      if (container.kind === 'bar') return 'bar'
+      if (container.kind === 'off') return 'off'
+      const pos = container.position?.[direction]
+      return typeof pos === 'number' ? pos : 0
+    }
 
     while (guard-- > 0 && workingGame.stateKind === 'moving') {
       const moves = Array.isArray(workingGame.activePlay?.moves)
@@ -46,6 +62,7 @@ export class NodotsAIProvider implements RobotAIProvider {
       // an origin/destination that was valid on a previous board but is
       // no longer legal, causing CORE to reject with "Invalid move".
       const play = workingGame.activePlay
+      const playerDirection = play?.player?.direction || 'clockwise'
       for (const rm of ready) {
         rm.possibleMoves = Core.Board.getPossibleMoves(
           workingGame.board,
@@ -70,13 +87,26 @@ export class NodotsAIProvider implements RobotAIProvider {
         break
       }
 
+      const executedFrom = posFromContainer(firstPossible?.origin, playerDirection)
+      const executedTo = posFromContainer(firstPossible?.destination, playerDirection)
+      const executedDieValue = bestMove.dieValue
+
       // Pass the destination and die value so planMoveExecution takes the
       // exact-mode path. Without these options it falls into the non-exact
       // branch that can throw "No legal moves available from origin X" when
       // the planner picks the wrong die first.
       workingGame = Core.Game.executeAndRecalculate(workingGame, originId, {
         desiredDestinationId: firstPossible?.destination?.id,
-        expectedDieValue: bestMove.dieValue,
+        expectedDieValue: executedDieValue,
+      })
+
+      telemetry.push({
+        executedFrom,
+        executedTo,
+        executedDieValue,
+        executedMoveKind: (firstPossible as any)?.moveKind || 'point-to-point',
+        executedIsHit: false,
+        usedFallback: false,
       })
 
       if (workingGame.stateKind === 'completed') break
@@ -86,7 +116,13 @@ export class NodotsAIProvider implements RobotAIProvider {
       workingGame = Core.Game.handleRobotMovedState(workingGame)
     }
 
-    return workingGame as BackgammonGameRolling
+    const result = workingGame as BackgammonGameRolling
+    Object.defineProperty(result as any, '__aiTelemetry', {
+      value: telemetry,
+      enumerable: false,
+      configurable: true,
+    })
+    return result
   }
 
   async selectBestMove(
