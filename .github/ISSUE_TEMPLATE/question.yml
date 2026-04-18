@@ -1,0 +1,36 @@
+name: Question
+description: Ask a question about using a Nodots Backgammon package or the app
+labels: ["question", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For open-ended discussion (ideas, show-and-tell, rules of play), prefer
+        [GitHub Discussions](https://github.com/nodots/nodots-backgammon/discussions).
+        Use this form when you have a concrete, answerable question about a
+        specific package or API.
+
+  - type: input
+    id: package
+    attributes:
+      label: Package or area
+      description: Which package or topic is your question about?
+      placeholder: "@nodots/backgammon-cli, API auth, board rendering, etc."
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do, and where are you stuck?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What you have tried
+      description: Code snippets, docs you read, search terms that did not help.
+    validations:
+      required: false
