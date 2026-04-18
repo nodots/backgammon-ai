@@ -13,8 +13,8 @@ import type {
   BackgammonGameRolledForStart,
   BackgammonGameRolling,
   BackgammonGameRollingForStart,
-} from '@nodots-llc/backgammon-types'
-import { Game, Player } from '@nodots-llc/backgammon-core'
+} from '@nodots/backgammon-types'
+import { Game, Player } from '@nodots/backgammon-core'
 import { registerAIProvider } from '../src/index.js'
 
 const parseArg = (name: string, def: number) => {

@@ -7,15 +7,15 @@
  */
 
 import { describe, expect, it, jest } from '@jest/globals'
-import type { BackgammonBoard } from '@nodots-llc/backgammon-types'
+import type { BackgammonBoard } from '@nodots/backgammon-types'
 
 const RUN = process.env.RUN_GNUBG_HINTS === '1'
 const itfn = RUN ? it : it.skip
 
 describe('GNUBG hints include bar reentry when entry is legal', () => {
   itfn('returns a reentry move for a bar position with roll [1,2]', async () => {
-    jest.unmock('@nodots-llc/gnubg-hints')
-    const { GnuBgHints } = await import('@nodots-llc/gnubg-hints')
+    jest.unmock('@nodots/gnubg-hints')
+    const { GnuBgHints } = await import('@nodots/gnubg-hints')
     await GnuBgHints.initialize()
     const { exportToGnuPositionId } = await import(
       '../../../core/src/Board/gnuPositionId.js'

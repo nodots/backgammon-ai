@@ -8,7 +8,7 @@ import type {
   BackgammonPoints,
   BackgammonPoint,
   BackgammonBoard,
-} from '@nodots-llc/backgammon-types'
+} from '@nodots/backgammon-types'
 import { jest } from '@jest/globals'
 import { selectBestMove } from '../moveSelection'
 

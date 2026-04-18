@@ -4,7 +4,7 @@
  * Ensures executeRobotTurnWithGNU calls GnuBgHints.getHintsFromPositionId with the
  * unmodified gnuPositionId (no half-rotation), aligning with GNU's standard.
  *
- * This test mocks @nodots-llc/gnubg-hints to avoid requiring the native addon.
+ * This test mocks @nodots/gnubg-hints to avoid requiring the native addon.
  */
 
 import { jest } from '@jest/globals'
@@ -13,7 +13,7 @@ import { jest } from '@jest/globals'
 const initializeMock = jest.fn().mockResolvedValue(undefined)
 const getMoveHintsMock = jest.fn().mockResolvedValue([])
 
-jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
+jest.unstable_mockModule('@nodots/gnubg-hints', () => ({
   GnuBgHints: {
     initialize: initializeMock,
     getMoveHints: getMoveHintsMock,

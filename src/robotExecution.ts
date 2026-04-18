@@ -2,7 +2,7 @@
  * Robot Turn Execution with GNU Backgammon
  *
  * This module contains GNU-specific logic for executing complete robot turns.
- * It was moved from @nodots-llc/backgammon-core to maintain separation of concerns
+ * It was moved from @nodots/backgammon-core to maintain separation of concerns
  * and keep GNU dependencies isolated to the AI package.
  */
 
@@ -15,14 +15,14 @@ import {
   BackgammonMoveOrigin,
   BackgammonRoll,
   BackgammonDieValue,
-} from '@nodots-llc/backgammon-types'
-import type { OverrideInfo, OverrideReason, AITelemetryStep } from '@nodots-llc/backgammon-types'
-import type { SkillConfig } from '@nodots-llc/backgammon-api-utils'
-import { GnuBgHints, MoveStep } from '@nodots-llc/gnubg-hints'
-import type { HintConfig } from '@nodots-llc/gnubg-hints'
+} from '@nodots/backgammon-types'
+import type { OverrideInfo, OverrideReason, AITelemetryStep } from '@nodots/backgammon-types'
+import type { SkillConfig } from '@nodots/backgammon-api-utils'
+import { GnuBgHints, MoveStep } from '@nodots/gnubg-hints'
+import type { HintConfig } from '@nodots/gnubg-hints'
 import fs from 'fs'
 import path from 'path'
-import { logger as coreLogger } from '@nodots-llc/backgammon-core'
+import { logger as coreLogger } from '@nodots/backgammon-core'
 
 // Lazy imports to break circular dependency (ESM-compatible)
 let Core: any = null
@@ -30,7 +30,7 @@ let Board: any = null
 let exportToGnuPositionIdFn: any = null
 const getCore = async () => {
   if (!Core) {
-    Core = await import('@nodots-llc/backgammon-core')
+    Core = await import('@nodots/backgammon-core')
   }
   return Core
 }

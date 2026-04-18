@@ -26,7 +26,7 @@ const getMoveHintsMock = jest.fn().mockResolvedValue([
   },
 ])
 
-jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
+jest.unstable_mockModule('@nodots/gnubg-hints', () => ({
   GnuBgHints: {
     initialize: initializeMock,
     getMoveHints: getMoveHintsMock,
@@ -50,7 +50,7 @@ jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
   }),
 }))
 
-jest.unstable_mockModule('@nodots-llc/backgammon-core', () => ({
+jest.unstable_mockModule('@nodots/backgammon-core', () => ({
   generateId: () => 'mock-id',
   logger: {
     debug: () => undefined,

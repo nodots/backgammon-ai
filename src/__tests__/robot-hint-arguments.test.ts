@@ -35,7 +35,7 @@ const confirmTurnMock = jest.fn((game: any) => ({
   stateKind: 'rolling',
 }))
 
-jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
+jest.unstable_mockModule('@nodots/gnubg-hints', () => ({
   GnuBgHints: {
     initialize: initializeMock,
     configure: configureMock,
@@ -43,7 +43,7 @@ jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
   },
 }))
 
-jest.unstable_mockModule('@nodots-llc/backgammon-core', () => ({
+jest.unstable_mockModule('@nodots/backgammon-core', () => ({
   Game: {
     executeAndRecalculate: executeAndRecalculateMock,
     checkAndCompleteTurn: checkAndCompleteTurnMock,
