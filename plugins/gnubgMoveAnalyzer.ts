@@ -1,5 +1,5 @@
 import type { BackgammonMoveBase } from '../../types/src/move'
-import type { HintRequest } from '@nodots-llc/gnubg-hints'
+import type { HintRequest } from '@nodots/gnubg-hints'
 import { gnubgHints } from '../src/gnubg.js'
 import { MoveAnalyzer, MoveAnalyzerContext } from '../src/moveAnalyzers'
 

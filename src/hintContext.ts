@@ -6,12 +6,12 @@ import type {
   BackgammonGame,
   BackgammonPlayMoving,
   BackgammonPoints,
-} from '@nodots-llc/backgammon-types';
+} from '@nodots/backgammon-types';
 import type {
   GameHintContextOverrides,
   HintRequest,
-} from '@nodots-llc/gnubg-hints';
-import { createHintRequestFromGame } from '@nodots-llc/gnubg-hints';
+} from '@nodots/gnubg-hints';
+import { createHintRequestFromGame } from '@nodots/gnubg-hints';
 
 export type GnubgColor = Exclude<BackgammonColor, undefined>;
 

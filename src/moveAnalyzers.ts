@@ -1,5 +1,5 @@
-import type { HintRequest } from '@nodots-llc/gnubg-hints'
-import { BackgammonMoveBase } from '@nodots-llc/backgammon-types'
+import type { HintRequest } from '@nodots/gnubg-hints'
+import { BackgammonMoveBase } from '@nodots/backgammon-types'
 
 // Context object for analyzers, can be extended as needed
 export interface MoveAnalyzerContext {

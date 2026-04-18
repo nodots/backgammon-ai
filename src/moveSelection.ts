@@ -7,7 +7,7 @@ import type {
   BackgammonPlayMoving,
   BackgammonMoveReady,
   BackgammonMoveDirection,
-} from '@nodots-llc/backgammon-types';
+} from '@nodots/backgammon-types';
 import type { GnubgColor } from './hintContext.js';
 import { getNormalizedPosition } from './hintContext.js';
 
@@ -31,7 +31,7 @@ async function tryLoadPolicyModel() {
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { logger as coreLogger } from '@nodots-llc/backgammon-core';
+import { logger as coreLogger } from '@nodots/backgammon-core';
 
 // Use shared logger while keeping AI prefixing for clarity.
 const withAiPrefix = (msg: string) =>

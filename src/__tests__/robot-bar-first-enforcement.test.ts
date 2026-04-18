@@ -37,7 +37,7 @@ const confirmTurnMock = jest.fn((game: any) => ({
 }))
 const exportToGnuPositionIdMock = jest.fn(() => 'pid')
 
-jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
+jest.unstable_mockModule('@nodots/gnubg-hints', () => ({
   GnuBgHints: {
     initialize: initializeMock,
     configure: configureMock,
@@ -45,7 +45,7 @@ jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
   },
 }))
 
-jest.unstable_mockModule('@nodots-llc/backgammon-core', () => ({
+jest.unstable_mockModule('@nodots/backgammon-core', () => ({
   Board: {},
   Game: {
     executeAndRecalculate: executeAndRecalculateMock,

@@ -9,8 +9,8 @@
  */
 
 import { describe, it, expect } from '@jest/globals'
-import { Board, Play } from '@nodots-llc/backgammon-core'
-import type { BackgammonPlayerMoving, BackgammonBar } from '@nodots-llc/backgammon-types'
+import { Board, Play } from '@nodots/backgammon-core'
+import type { BackgammonPlayerMoving, BackgammonBar } from '@nodots/backgammon-types'
 
 describe('Bar reentry dice usage bug', () => {
   it('should not allow using the same die value twice after bar reentry', () => {

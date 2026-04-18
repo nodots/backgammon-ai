@@ -10,8 +10,8 @@ import type {
   BackgammonGameRolling,
   BackgammonPlayMoving,
   BackgammonMoveReady,
-} from '@nodots-llc/backgammon-types'
-import type { RobotAIProvider } from '@nodots-llc/backgammon-core'
+} from '@nodots/backgammon-types'
+import type { RobotAIProvider } from '@nodots/backgammon-core'
 
 export class NodotsAIProvider implements RobotAIProvider {
   async executeRobotTurn(
@@ -23,7 +23,7 @@ export class NodotsAIProvider implements RobotAIProvider {
       )
     }
 
-    const Core = await import('@nodots-llc/backgammon-core')
+    const Core = await import('@nodots/backgammon-core')
     const { selectBestMove } = await import('./moveSelection.js')
 
     let workingGame: any = game

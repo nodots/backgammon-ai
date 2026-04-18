@@ -5,8 +5,8 @@
  * for mapping GNU hint steps to CORE READY moves.
  */
 
-import type { MoveStep } from '@nodots-llc/gnubg-hints'
-import type { BackgammonMoveDirection, BackgammonColor } from '@nodots-llc/backgammon-types'
+import type { MoveStep } from '@nodots/gnubg-hints'
+import type { BackgammonMoveDirection, BackgammonColor } from '@nodots/backgammon-types'
 
 // Import the matching function
 import { matchStepToReadyMove, PositionMatchResult } from '../robotExecution.js'

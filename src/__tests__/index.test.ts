@@ -4,7 +4,7 @@ import type {
   BackgammonPlayMoving,
   BackgammonPoint,
   BackgammonPoints,
-} from '@nodots-llc/backgammon-types';
+} from '@nodots/backgammon-types';
 
 const { selectBestMove } = await import('../moveSelection.js')
 

@@ -1,12 +1,12 @@
-import type { BackgammonMoveBase } from '@nodots-llc/backgammon-types';
+import type { BackgammonMoveBase } from '@nodots/backgammon-types';
 import type {
   DoubleHint,
   HintConfig,
   HintRequest,
   MoveHint,
   TakeHint,
-} from '@nodots-llc/gnubg-hints';
-import { MoveFilterSetting } from '@nodots-llc/gnubg-hints';
+} from '@nodots/gnubg-hints';
+import { MoveFilterSetting } from '@nodots/gnubg-hints';
 import { gnubgHints, GnubgHintsIntegration } from './gnubg.js';
 import { MoveAnalyzer, RandomMoveAnalyzer } from './moveAnalyzers.js';
 
@@ -17,7 +17,7 @@ let registered = false;
 export async function registerAIProvider(): Promise<void> {
   if (registered) return;
 
-  const { RobotAIRegistry } = await import('@nodots-llc/backgammon-core');
+  const { RobotAIRegistry } = await import('@nodots/backgammon-core');
   const { GNUAIProvider } = await import('./GNUAIProvider.js');
   const { NodotsAIProvider } = await import('./NodotsAIProvider.js');
 

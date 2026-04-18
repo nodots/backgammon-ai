@@ -17,10 +17,6 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "references": [
-    { "path": "../types" },
-    { "path": "../core" }
-  ],
   "include": [
     "src/**/*"
   ],

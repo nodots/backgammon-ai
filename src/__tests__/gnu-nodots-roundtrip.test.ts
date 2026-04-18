@@ -15,7 +15,7 @@ let GnuBgHints: any
 let gnubgAvailable = false
 
 try {
-  const gnubgModule = await import('@nodots-llc/gnubg-hints')
+  const gnubgModule = await import('@nodots/gnubg-hints')
   GnuBgHints = gnubgModule.GnuBgHints
   gnubgAvailable = true
 } catch {
