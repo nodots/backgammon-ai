@@ -1,7 +1,7 @@
 {
-  "name": "@nodots-llc/backgammon-ai",
-  "version": "4.6.4-staging.15",
-  "description": "AI and integration for nodots-backgammon using the @nodots-llc/gnubg-hints native addon.",
+  "name": "@nodots/backgammon-ai",
+  "version": "1.0.0-rc.1",
+  "description": "AI and integration for nodots-backgammon using the @nodots/gnubg-hints native addon.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,17 +18,17 @@
     "typescript"
   ],
   "author": "Ken Riley <kenr@nodots.com>",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nodots/nodots-backgammon-ai.git"
+    "url": "git+https://github.com/nodots/backgammon-ai.git"
   },
-  "homepage": "https://github.com/nodots/nodots-backgammon-ai",
+  "homepage": "https://github.com/nodots/backgammon-ai",
   "bugs": {
-    "url": "https://github.com/nodots/nodots-backgammon-ai/issues"
+    "url": "https://github.com/nodots/backgammon-ai/issues"
   },
   "scripts": {
     "test": "jest",
@@ -56,9 +56,10 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@nodots-llc/backgammon-core": "file:../core",
-    "@nodots-llc/backgammon-types": "file:../types",
-    "@nodots-llc/gnubg-hints": "file:../gnubg-hints/gnubg-node-addon",
+    "@nodots/backgammon-api-utils": "^1.0.0-rc.1",
+    "@nodots/backgammon-core": "^1.0.0-rc.1",
+    "@nodots/backgammon-types": "^1.0.0-rc.1",
+    "@nodots/gnubg-hints": "^1.0.0-rc.1",
     "@types/socket.io-client": "^1.4.36",
     "socket.io-client": "^4.8.1"
   },

@@ -5,8 +5,8 @@
  * Uses GNU Backgammon equity evaluations to measure luck.
  */
 
-import type { BackgammonColor } from '@nodots-llc/backgammon-types'
-import { GnuBgHints } from '@nodots-llc/gnubg-hints'
+import type { BackgammonColor } from '@nodots/backgammon-types'
+import { GnuBgHints } from '@nodots/gnubg-hints'
 
 /**
  * All 21 possible dice combinations with their probabilities.

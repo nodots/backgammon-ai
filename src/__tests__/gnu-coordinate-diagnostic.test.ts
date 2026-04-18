@@ -13,14 +13,14 @@ import type {
   BackgammonColor,
   BackgammonMoveDirection,
   BackgammonGame,
-} from '@nodots-llc/backgammon-types'
+} from '@nodots/backgammon-types'
 
 // Try to import the real gnubg-hints - skip tests if native addon not available
 let GnuBgHints: any
 let gnubgAvailable = false
 
 try {
-  const gnubgModule = await import('@nodots-llc/gnubg-hints')
+  const gnubgModule = await import('@nodots/gnubg-hints')
   GnuBgHints = gnubgModule.GnuBgHints
   gnubgAvailable = true
 } catch (e) {
@@ -30,7 +30,7 @@ try {
 // Import core utilities for position ID generation
 let CoreUtil: any
 try {
-  CoreUtil = await import('@nodots-llc/backgammon-core')
+  CoreUtil = await import('@nodots/backgammon-core')
 } catch (e) {
   console.log('Core package not available')
 }

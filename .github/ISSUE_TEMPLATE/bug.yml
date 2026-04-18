@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a defect in a Nodots Backgammon package or the web app
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill in the
+        sections below so we can reproduce and fix the issue quickly.
+
+  - type: input
+    id: package
+    attributes:
+      label: Affected package or component
+      description: Which package, app, or endpoint is affected?
+      placeholder: "@nodots/backgammon-core, backgammon.nodots.com, api.nodots.com, etc."
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `npm list <package>` or the version shown in the app footer.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include error messages and stack traces.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, self-contained steps. A link to a repro repo is ideal.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, browser (if applicable).
+      placeholder: "macOS 14.5, Node 22.17.1, Chrome 139"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, logs, or anything else that helps.
+    validations:
+      required: false

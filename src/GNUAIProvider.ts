@@ -10,8 +10,8 @@ import type {
   BackgammonGameRolling,
   BackgammonPlayMoving,
   BackgammonMoveReady,
-} from '@nodots-llc/backgammon-types'
-import type { RobotAIProvider } from '@nodots-llc/backgammon-core'
+} from '@nodots/backgammon-types'
+import type { RobotAIProvider } from '@nodots/backgammon-core'
 import { executeRobotTurnWithGNU } from './robotExecution.js'
 
 export class GNUAIProvider implements RobotAIProvider {

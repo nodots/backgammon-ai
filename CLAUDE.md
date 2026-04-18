@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is the AI package (`@nodots-llc/backgammon-ai`) within the Nodots Backgammon monorepo ecosystem. It provides AI capabilities for backgammon games using the native `@nodots-llc/gnubg-hints` addon to access GNU Backgammon's evaluation engine and includes a plugin system for custom AI analyzers.
+This is the AI package (`@nodots/backgammon-ai`) within the Nodots Backgammon monorepo ecosystem. It provides AI capabilities for backgammon games using the native `@nodots/gnubg-hints` addon to access GNU Backgammon's evaluation engine and includes a plugin system for custom AI analyzers.
 
 ## Repository Structure
 
@@ -61,8 +61,8 @@ npm run clean         # Remove dist and coverage directories
 
 ### Key Dependencies
 
-- **Types**: All game types imported from `@nodots-llc/backgammon-types`
-- **Core**: Logger imported from `@nodots-llc/backgammon-core`
+- **Types**: All game types imported from `@nodots/backgammon-types`
+- **Core**: Logger imported from `@nodots/backgammon-core`
 - **External**: socket.io-client for WebSocket communication
 
 ### Type System
@@ -78,7 +78,7 @@ npm run clean         # Remove dist and coverage directories
 1. `selectBestMove()` receives a `BackgammonPlayMoving` object
 2. Filters moves for those with `stateKind: 'ready'`
 3. Attempts strategies in order:
-   - Structured hints from `@nodots-llc/gnubg-hints` (required for gbg-bot)
+   - Structured hints from `@nodots/gnubg-hints` (required for gbg-bot)
    - Opening book (predefined best moves for opening rolls)
    - Strategic heuristics (prefers advancing moves)
    - Fallback to first available move

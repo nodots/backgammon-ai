@@ -1,13 +1,13 @@
 import path from 'path'
 import { jest } from '@jest/globals'
-import type { MoveHint } from '@nodots-llc/gnubg-hints'
+import type { MoveHint } from '@nodots/gnubg-hints'
 import { fileURLToPath } from 'url'
 
 let mockHints: MoveHint[] = []
 const initializeMock = jest.fn().mockResolvedValue(undefined)
 const getMoveHintsMock = jest.fn(async () => mockHints)
 
-jest.unstable_mockModule('@nodots-llc/gnubg-hints', () => ({
+jest.unstable_mockModule('@nodots/gnubg-hints', () => ({
   GnuBgHints: {
     initialize: initializeMock,
     configure: jest.fn(),

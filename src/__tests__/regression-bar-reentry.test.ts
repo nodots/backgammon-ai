@@ -11,7 +11,7 @@
  * installed. It is skipped by default unless RUN_GNUBG_HINTS=1
  */
 
-import { GnuBgHints } from '@nodots-llc/gnubg-hints'
+import { GnuBgHints } from '@nodots/gnubg-hints'
 
 function swapPidHalves(pid: string): string {
   const buf = Buffer.from(pid + '==', 'base64')

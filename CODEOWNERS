@@ -1,0 +1,3 @@
+# Default owner for the entire workspace.
+# GitHub assigns this owner as a required reviewer on every pull request.
+* @nodots

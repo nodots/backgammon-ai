@@ -4,29 +4,29 @@ import type {
   HintRequest,
   MoveHint,
   TakeHint,
-} from '@nodots-llc/gnubg-hints';
-import type { BackgammonColor, BackgammonMoveDirection } from '@nodots-llc/backgammon-types';
+} from '@nodots/gnubg-hints';
+import type { BackgammonColor, BackgammonMoveDirection } from '@nodots/backgammon-types';
 
 type GnubgHintsModule = any;
 type GnubgHintsHandle = any;
 
 const buildInstructions = `
-The @nodots-llc/gnubg-hints native addon could not be loaded.
+The @nodots/gnubg-hints native addon could not be loaded.
 
 Troubleshooting steps:
 1. Ensure system build tools are installed (Node.js >= 18, Python 3, make, C/C++, and node-gyp prerequisites).
 2. Reinstall dependencies from this package directory:
-   npm install --build-from-source @nodots-llc/gnubg-hints
+   npm install --build-from-source @nodots/gnubg-hints
 3. If you are inside a workspace, run:
    npm --prefix packages/ai install
-4. Refer to the @nodots-llc/gnubg-hints README for platform-specific setup details.
+4. Refer to the @nodots/gnubg-hints README for platform-specific setup details.
 `.trim();
 
 let modulePromise: Promise<GnubgHintsModule> | null = null;
 
 function loadAddon(): Promise<GnubgHintsModule> {
     if (!modulePromise) {
-    modulePromise = import('@nodots-llc/gnubg-hints') as any;
+    modulePromise = import('@nodots/gnubg-hints') as any;
     }
   return modulePromise!;
 }
