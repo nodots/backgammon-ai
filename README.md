@@ -14,7 +14,6 @@ A TypeScript library providing AI capabilities for backgammon games using the na
 ## Table of Contents
 
 - [Features](#features)
-- [What's New in v4.6](#whats-new-in-v46)
 - [Architecture](#architecture)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -35,27 +34,6 @@ A TypeScript library providing AI capabilities for backgammon games using the na
 - **Structured Hints** - Equity calculations, move rankings, probability analysis
 - **Robot Execution** - Complete turn automation with telemetry
 - **TypeScript First** - Full type definitions and intelligent integration
-
----
-
-## What's New in v4.6
-
-### Enhanced Robot Execution
-- One-shot GNU plan per turn for consistent move sequences
-- Improved position ID generation using Golden Rule encoding
-- Enhanced telemetry tracking for AI decisions
-- Better handling of constrained doubles scenarios
-
-### Hint Context Improvements
-- Normalized board representation for GNU hints
-- Proper dice tuple handling for gnubg roll format
-- Board state tracking through all moves
-
-### AI Telemetry
-- Comprehensive tracking of AI decision-making
-- Override reason codes for debugging
-- Plan execution tracking (planLength, planIndex)
-- Position and roll source tracking
 
 ---
 
