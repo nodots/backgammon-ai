@@ -1,6 +1,6 @@
 # Nodots Backgammon AI
 
-**Version 4.6.4** | AI Engine powered by GNU Backgammon
+**Version 1.0.0** | AI Engine powered by GNU Backgammon
 
 <!-- COVERAGE-START -->
 ![Statements](https://img.shields.io/badge/Statements-60%25-orange?style=flat-square)
@@ -9,7 +9,7 @@
 ![Lines](https://img.shields.io/badge/Lines-60%25-orange?style=flat-square)
 <!-- COVERAGE-END -->
 
-A TypeScript library providing AI capabilities for backgammon games using the native `@nodots-llc/gnubg-hints` addon to access GNU Backgammon's evaluation engine. Features a plugin system for custom AI analyzers and comprehensive move analysis.
+A TypeScript library providing AI capabilities for backgammon games using the native `@nodots/gnubg-hints` addon to access GNU Backgammon's evaluation engine. Features a plugin system for custom AI analyzers and comprehensive move analysis.
 
 ## Table of Contents
 
@@ -41,7 +41,7 @@ A TypeScript library providing AI capabilities for backgammon games using the na
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        @nodots-llc/backgammon-ai                            │
+│                        @nodots/backgammon-ai                            │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
@@ -73,7 +73,7 @@ A TypeScript library providing AI capabilities for backgammon games using the na
 │  │                   GNU Backgammon Integration                          │  │
 │  │                                                                       │  │
 │  │  ┌─────────────────────────────────────────────────────────────────┐ │  │
-│  │  │              @nodots-llc/gnubg-hints (Native Addon)             │ │  │
+│  │  │              @nodots/gnubg-hints (Native Addon)             │ │  │
 │  │  │                                                                 │ │  │
 │  │  │  getMoveHints()  │  getCubeHints()  │  getTakeHints()          │ │  │
 │  │  └─────────────────────────────────────────────────────────────────┘ │  │
@@ -100,7 +100,7 @@ A TypeScript library providing AI capabilities for backgammon games using the na
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           Dependencies                                      │
 │  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐    │
-│  │ @nodots-llc/       │  │ @nodots-llc/       │  │ @nodots-llc/       │    │
+│  │ @nodots/       │  │ @nodots/       │  │ @nodots/       │    │
 │  │ backgammon-core    │  │ backgammon-types   │  │ gnubg-hints        │    │
 │  │ (Logger, Board)    │  │ (Type definitions) │  │ (Native addon)     │    │
 │  └────────────────────┘  └────────────────────┘  └────────────────────┘    │
@@ -128,7 +128,7 @@ src/
 ## Installation
 
 ```bash
-npm install @nodots-llc/backgammon-ai
+npm install @nodots/backgammon-ai
 ```
 
 ### Requirements
@@ -146,8 +146,8 @@ npm install @nodots-llc/backgammon-ai
 ### Get Move Hints
 
 ```typescript
-import { buildHintContextFromGame, gnubgHints } from '@nodots-llc/backgammon-ai'
-import type { BackgammonGame } from '@nodots-llc/backgammon-types'
+import { buildHintContextFromGame, gnubgHints } from '@nodots/backgammon-ai'
+import type { BackgammonGame } from '@nodots/backgammon-types'
 
 const game: BackgammonGame = /* obtain current game state */
 const { request } = buildHintContextFromGame(game)
@@ -160,8 +160,8 @@ console.log('Equity:', bestHint?.equity)
 ### Select Best Move
 
 ```typescript
-import { selectBestMove } from '@nodots-llc/backgammon-ai'
-import type { BackgammonPlayMoving } from '@nodots-llc/backgammon-types'
+import { selectBestMove } from '@nodots/backgammon-ai'
+import type { BackgammonPlayMoving } from '@nodots/backgammon-types'
 
 const bestMove = await selectBestMove(play as BackgammonPlayMoving, 'gbg-bot')
 ```
@@ -227,7 +227,7 @@ import {
   NodotsAIMoveAnalyzer,
   GnubgMoveAnalyzer,
   selectMoveFromList
-} from '@nodots-llc/backgammon-ai'
+} from '@nodots/backgammon-ai'
 
 // Choose analyzer based on difficulty
 const analyzer = difficulty === 'expert'
@@ -240,8 +240,8 @@ const bestMove = await selectMoveFromList(moves, analyzer)
 ### Creating Custom Analyzers
 
 ```typescript
-import { MoveAnalyzer, MoveAnalyzerContext } from '@nodots-llc/backgammon-ai'
-import { BackgammonMoveBase } from '@nodots-llc/backgammon-types'
+import { MoveAnalyzer, MoveAnalyzerContext } from '@nodots/backgammon-ai'
+import { BackgammonMoveBase } from '@nodots/backgammon-types'
 
 export class MyCustomAnalyzer implements MoveAnalyzer {
   async selectMove(
@@ -264,7 +264,7 @@ export default MyCustomAnalyzer
 ### Dynamic Plugin Loading
 
 ```typescript
-import { loadAnalyzersFromPluginsDir } from '@nodots-llc/backgammon-ai'
+import { loadAnalyzersFromPluginsDir } from '@nodots/backgammon-ai'
 
 const analyzers = await loadAnalyzersFromPluginsDir('./my-plugins')
 const move = await analyzers['myCustomAnalyzer'].selectMove(moves, context)
@@ -286,7 +286,7 @@ interface HintRequest {
 ### Getting Hints
 
 ```typescript
-import { gnubgHints } from '@nodots-llc/backgammon-ai'
+import { gnubgHints } from '@nodots/backgammon-ai'
 
 // Move hints
 const moveHints = await gnubgHints.getMoveHints(request, 5) // top 5 moves
@@ -313,8 +313,8 @@ interface MoveHint {
 ### Configuration
 
 ```typescript
-import { configureGnubgHints, initializeGnubgHints } from '@nodots-llc/backgammon-ai'
-import { MoveFilterSetting } from '@nodots-llc/gnubg-hints'
+import { configureGnubgHints, initializeGnubgHints } from '@nodots/backgammon-ai'
+import { MoveFilterSetting } from '@nodots/gnubg-hints'
 
 // Initialize with custom weights
 await initializeGnubgHints({ weightsPath: '/path/to/gnubg.weights' })
@@ -333,7 +333,7 @@ configureGnubgHints({
 ### Execute Robot Turn
 
 ```typescript
-import { executeRobotTurn } from '@nodots-llc/backgammon-ai'
+import { executeRobotTurn } from '@nodots/backgammon-ai'
 
 const result = await executeRobotTurn(game, robotId)
 
