@@ -67,6 +67,34 @@ export class FurthestFromOffMoveAnalyzer implements MoveAnalyzer {
   }
 }
 
+/**
+ * Picks a move by reading tea leaves.
+ *
+ * Paper 10, Section 8.4 admits tea leaves as a valid plugin. This is
+ * that plugin. There is no evaluation, no heuristic, no weights. The
+ * position ID (when present) is fed through a cheap string hash and
+ * the remainder modulo `moves.length` picks the move — deterministic
+ * per position, meaningless as backgammon. Without a position ID the
+ * analyzer falls back to `Date.now()`, which is genuinely arbitrary.
+ *
+ * Intended as a calibration floor and a living footnote.
+ */
+export class TeaLeavesMoveAnalyzer implements MoveAnalyzer {
+  async selectMove(
+    moves: BackgammonMoveBase[],
+    context?: MoveAnalyzerContext
+  ): Promise<BackgammonMoveBase | null> {
+    if (!moves.length) return null
+    const leaves = context?.positionId ?? String(Date.now())
+    let hash = 0
+    for (let i = 0; i < leaves.length; i++) {
+      hash = (hash * 31 + leaves.charCodeAt(i)) | 0
+    }
+    const idx = Math.abs(hash) % moves.length
+    return moves[idx]
+  }
+}
+
 // Template for plugin authors
 export class ExamplePluginAnalyzer implements MoveAnalyzer {
   async selectMove(

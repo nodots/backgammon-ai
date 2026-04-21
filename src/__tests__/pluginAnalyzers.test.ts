@@ -87,6 +87,32 @@ describe('Plugin Analyzers', () => {
     expect(move).toBe(moves[0])
   })
 
+  it('teaLeavesMoveAnalyzer returns null on empty input', async () => {
+    const move = await analyzers['teaLeavesMoveAnalyzer'].selectMove([])
+    expect(move).toBeNull()
+  })
+
+  it('teaLeavesMoveAnalyzer always returns an element of the input set', async () => {
+    const move = await analyzers['teaLeavesMoveAnalyzer'].selectMove(
+      moves as any,
+      { positionId: '4HPwATDgc/ABMA' },
+    )
+    expect(moves).toContain(move)
+  })
+
+  it('teaLeavesMoveAnalyzer is deterministic given the same positionId', async () => {
+    const ctx = { positionId: '4HPwATDgc/ABMA' }
+    const first = await analyzers['teaLeavesMoveAnalyzer'].selectMove(
+      moves as any,
+      ctx,
+    )
+    const second = await analyzers['teaLeavesMoveAnalyzer'].selectMove(
+      moves as any,
+      ctx,
+    )
+    expect(first).toBe(second)
+  })
+
   it('gnubgMoveAnalyzer falls back to the first move when no hints are provided', async () => {
     const move = await analyzers['gnubgMoveAnalyzer'].selectMove(moves as any, {
       hintRequest: {
