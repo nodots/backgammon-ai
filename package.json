@@ -1,6 +1,6 @@
 {
   "name": "@nodots/backgammon-ai",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.3",
   "description": "AI and integration for nodots-backgammon using the @nodots/gnubg-hints native addon.",
   "type": "module",
   "main": "dist/index.js",
@@ -56,9 +56,9 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@nodots/backgammon-api-utils": "^1.0.0-rc.1",
-    "@nodots/backgammon-core": "^1.0.0-rc.1",
-    "@nodots/backgammon-types": "^1.0.0-rc.1",
+    "@nodots/backgammon-api-utils": "^1.0.0-rc.3",
+    "@nodots/backgammon-core": "^1.0.0-rc.3",
+    "@nodots/backgammon-types": "^1.0.0-rc.3",
     "@nodots/gnubg-hints": "^1.0.0-rc.1",
     "@types/socket.io-client": "^1.4.36",
     "socket.io-client": "^4.8.1"

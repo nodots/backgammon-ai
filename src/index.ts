@@ -20,15 +20,19 @@ export async function registerAIProvider(): Promise<void> {
   const { RobotAIRegistry } = await import('@nodots/backgammon-core');
   const { GNUAIProvider } = await import('./GNUAIProvider.js');
   const { NodotsAIProvider } = await import('./NodotsAIProvider.js');
+  const { TeaLeavesAIProvider } = await import('./TeaLeavesAIProvider.js');
 
   const gnuProvider = new GNUAIProvider();
   const nodotsProvider = new NodotsAIProvider();
+  const teaLeavesProvider = new TeaLeavesAIProvider();
 
   // GNU robots: matched by email prefix from seed-robots.ts
   RobotAIRegistry.register('gnu-*', gnuProvider);
   RobotAIRegistry.register('gbg-bot@nodots.com', gnuProvider);
   // Nodots heuristic bot
   RobotAIRegistry.register('nbg-*', nodotsProvider);
+  // Tea Leaves: calibration-floor provider that picks by hashing position id
+  RobotAIRegistry.register('tea-*', teaLeavesProvider);
   // Fallback for any unrecognized robot
   RobotAIRegistry.register('*', nodotsProvider);
 
