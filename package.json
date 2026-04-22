@@ -1,6 +1,6 @@
 {
   "name": "@nodots/backgammon-ai",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.5",
   "description": "AI and integration for nodots-backgammon using the @nodots/gnubg-hints native addon.",
   "type": "module",
   "main": "dist/index.js",
