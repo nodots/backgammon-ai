@@ -10,6 +10,7 @@ let plannedMoves: any[] = []
 let executeCalls: string[] = []
 let executeOptions: Array<any | undefined> = []
 let executeBehavior: (game: any, originId: string) => any
+let currentReadyMoves: any[] = []
 
 const initializeMock = jest.fn().mockResolvedValue(undefined)
 const configureMock = jest.fn().mockResolvedValue(undefined)
@@ -18,14 +19,17 @@ const getHintsMock = jest.fn(() => Promise.resolve([{ moves: plannedMoves }]))
 const executeAndRecalculateMock = jest.fn((game: any, originId: string, options?: any) => {
   executeCalls.push(originId)
   executeOptions.push(options)
-  if (executeBehavior) {
-    return executeBehavior(game, originId)
-  }
-  return {
-    ...game,
-    activePlay: { ...game.activePlay, moves: [] },
-    stateKind: 'moving',
-  }
+  const next = executeBehavior
+    ? executeBehavior(game, originId)
+    : {
+        ...game,
+        activePlay: { ...game.activePlay, moves: [] },
+        stateKind: 'moving',
+      }
+  // Keep the getPossibleMoves mock in sync with the new working game so the
+  // next iteration's recomputation sees fresh fixture data.
+  currentReadyMoves = next?.activePlay?.moves || []
+  return next
 })
 const checkAndCompleteTurnMock = jest.fn((game: any) => ({
   ...game,
@@ -45,14 +49,33 @@ jest.unstable_mockModule('@nodots/gnubg-hints', () => ({
   },
 }))
 
+const noopLogger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+}
+
+// `executeRobotTurnWithGNU` recomputes possibleMoves each iteration via
+// Board.getPossibleMoves to defeat staleness. The mocked engine here doesn't
+// model the board, so make the recomputation a passthrough: return whatever
+// the test fixture put on the matching ready move (looked up in a shared
+// `currentReadyMoves` reference that each step's executeBehavior can update).
+const getPossibleMovesMock = jest.fn((_board: any, _player: any, dieValue: any) => {
+  const match = currentReadyMoves.find((m) => m?.dieValue === dieValue)
+  return match?.possibleMoves || []
+})
+
 jest.unstable_mockModule('@nodots/backgammon-core', () => ({
-  Board: {},
+  Board: { getPossibleMoves: getPossibleMovesMock },
   Game: {
     executeAndRecalculate: executeAndRecalculateMock,
     checkAndCompleteTurn: checkAndCompleteTurnMock,
     confirmTurn: confirmTurnMock,
+    handleRobotMovedState: jest.fn((g: any) => g),
   },
   exportToGnuPositionId: exportToGnuPositionIdMock,
+  logger: noopLogger,
 }))
 
 const { executeRobotTurnWithGNU } = await import('../robotExecution.js')
@@ -100,6 +123,10 @@ const createGame = (readyMoves: any[]) => {
     isRobot: true,
     dice: { stateKind: 'rolled', currentRoll: [1, 2] },
   }
+  // The Board.getPossibleMoves mock looks up possibleMoves by dieValue from
+  // currentReadyMoves -- keep it in sync with the initial ready moves so the
+  // first iteration's recomputation returns what the fixture set up.
+  currentReadyMoves = readyMoves
   return {
     id: 'game-1',
     stateKind: 'moving',
@@ -176,7 +203,10 @@ beforeEach(() => {
 })
 
 describe('executeRobotTurnWithGNU bar-first enforcement', () => {
-  it('prefers bar reentry even when GNU plans a point-to-point move', async () => {
+  it('throws when GNU plans a point-to-point move while bar reentry is required', async () => {
+    // Game-rule view: bar checkers MUST move first. CLAUDE.md absolute-rule
+    // view: if GNU's plan disagrees, the encoding/translation has drifted --
+    // refuse to silently substitute and surface the diagnostic instead.
     plannedMoves = [
       {
         from: 24,
@@ -195,11 +225,16 @@ describe('executeRobotTurnWithGNU bar-first enforcement', () => {
     ]
     const game = createGame(readyMoves)
 
-    await expect(executeRobotTurnWithGNU(game as any)).resolves.toBeDefined()
-    expect(executeCalls[0]).toBe('bar-cw')
+    await expect(executeRobotTurnWithGNU(game as any)).rejects.toThrow(
+      /required bar reentry/
+    )
+    expect(executeCalls).toEqual([])
   })
 
-  it('falls back to a bar move when GNU plan has no legal match', async () => {
+  it('throws (no silent fallback) when GNU plan has no legal bar match', async () => {
+    // Per CLAUDE.md absolute rule: when GNU plans a non-bar move while bar
+    // checkers are still on the board, refuse to silently substitute a bar
+    // reentry. The encoding/translation layer is broken and must be fixed.
     plannedMoves = [
       {
         from: 24,
@@ -215,11 +250,13 @@ describe('executeRobotTurnWithGNU bar-first enforcement', () => {
     const readyMoves = [createBarMove(1, 24)]
     const game = createGame(readyMoves)
 
-    await expect(executeRobotTurnWithGNU(game as any)).resolves.toBeDefined()
-    expect(executeCalls[0]).toBe('bar-cw')
+    await expect(executeRobotTurnWithGNU(game as any)).rejects.toThrow(
+      /required bar reentry/
+    )
+    expect(executeCalls).toEqual([])
   })
 
-  it('does not execute a stale non-bar step while bar checkers remain', async () => {
+  it('throws on a stale non-bar step while bar checkers remain', async () => {
     plannedMoves = [
       {
         from: 25,
@@ -261,8 +298,12 @@ describe('executeRobotTurnWithGNU bar-first enforcement', () => {
     const readyMoves = [createBarMove(1, 24)]
     const game = createGame(readyMoves)
 
-    await expect(executeRobotTurnWithGNU(game as any)).resolves.toBeDefined()
-    expect(executeCalls).toEqual(['bar-cw', 'bar-cw'])
+    // First step (reenter) succeeds and matches the bar reentry. Second step's
+    // plan is a non-bar move while a bar checker still remains -- must throw.
+    await expect(executeRobotTurnWithGNU(game as any)).rejects.toThrow(
+      /required bar reentry/
+    )
+    expect(executeCalls).toEqual(['bar-cw'])
   })
 
   it('passes exact destination and die when matching a bar reentry plan', async () => {
