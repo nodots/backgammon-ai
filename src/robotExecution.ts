@@ -219,11 +219,11 @@ export const executeRobotTurnWithGNU = async (
       'clockwise'
     const activePlayerColor =
       ((currentGame.activePlayer as any)?.color as BackgammonColor) ?? 'white'
-    // GNU rNoise is the sole noise mechanism -- always request 1 hint
+    // Request multiple hints so the tiebreaker below has alternatives.
     const hints = await GnuBgHints.getHintsFromPositionId(
       planPositionId,
       currentRoll,
-      1,
+      5,
       activePlayerDirection,
       activePlayerColor
     )
@@ -231,7 +231,32 @@ export const executeRobotTurnWithGNU = async (
       return []
     }
 
-    return hints[0]?.moves || []
+    // Issue nodots/backgammon-ai#41: in races and bear-off endgames GNU's
+    // evaluator can rank multiple winning lines essentially equally (deltas
+    // within float-precision noise). Picking hints[0] blindly threw away an
+    // immediate win in production game bf09273a-... when hints[1] bore off
+    // both checkers. Among lines tied within EQUITY_TIE_EPSILON, prefer the
+    // one that bears off more checkers this turn -- the racing principle
+    // "off > pips" is a strict improvement when equity is genuinely tied.
+    const EQUITY_TIE_EPSILON = 1e-3
+    const topEquity = hints[0].equity ?? 0
+    const tied = hints.filter(
+      (h) => Math.abs((h.equity ?? 0) - topEquity) <= EQUITY_TIE_EPSILON
+    )
+    const bearOffCount = (h: { moves?: MoveStep[] }) =>
+      (h.moves || []).filter((m) => m.moveKind === 'bear-off').length
+    const best = tied.reduce((a, b) =>
+      bearOffCount(b) > bearOffCount(a) ? b : a
+    )
+    if (best !== hints[0]) {
+      logger.info('[AI] Tiebreak selected hint with more bear-offs', {
+        topEquity,
+        chosenEquity: best.equity,
+        topBearOffs: bearOffCount(hints[0]),
+        chosenBearOffs: bearOffCount(best),
+      })
+    }
+    return best.moves || []
   }
 
   // Get plan ONCE before the loop (true one-shot planning to avoid die-tracking bug #250)
@@ -397,16 +422,36 @@ export const executeRobotTurnWithGNU = async (
         }
       }
       if (!barMatchedId) {
-        logger.info('[BAR-DEBUG] No match found, using fallback')
-        const firstBarMove = barMoves.find((m) =>
-          Array.isArray(m.possibleMoves)
+        // ABSOLUTE RULE (CLAUDE.md): no silent fallbacks in AI code. If GNU's
+        // plan does not include a bar reentry while bar checkers are still on
+        // the board, the position-encoding / move-translation has drifted --
+        // throw with diagnostics rather than guess a substitute.
+        const dirForDiag =
+          (workingGame.activePlayer as any)?.direction || 'clockwise'
+        const diag = {
+          positionId,
+          plannedFrom,
+          plannedTo,
+          plannedKind,
+          direction: dirForDiag,
+          barCheckersByDirection: barByDir,
+          barCheckersByColor: barBothDirs,
+          legalBarReentries: barMoves.flatMap((m) =>
+            (m.possibleMoves || [])
+              .filter((pm: any) => pm?.origin?.kind === 'bar')
+              .map((pm: any) => ({
+                dieValue: (pm as any)?.dieValue ?? (m as any)?.dieValue,
+                destPos: (pm as any)?.destination?.position?.[dirForDiag],
+              }))
+          ),
+        }
+        logger.error(
+          '[AI] GNU plan does not match required bar reentry',
+          diag
         )
-        const fallbackMove = firstBarMove?.possibleMoves?.[0]
-        barMatchedId = fallbackMove?.origin?.id ?? null
-        desiredDestinationId = fallbackMove?.destination?.id ?? null
-        expectedDieValue =
-          (fallbackMove as any)?.dieValue ?? (firstBarMove as any)?.dieValue
-        logger.info('[BAR-DEBUG] Fallback: barMatchedId=', barMatchedId, 'destId=', desiredDestinationId, 'die=', expectedDieValue)
+        throw new Error(
+          `[AI] GNU plan does not include required bar reentry; refusing to silently substitute. ${JSON.stringify(diag)}`
+        )
       }
       if (barMatchedId) {
         originIdToUse = barMatchedId
