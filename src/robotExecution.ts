@@ -20,8 +20,6 @@ import type { OverrideInfo, OverrideReason, AITelemetryStep } from '@nodots/back
 import type { SkillConfig } from '@nodots/backgammon-api-utils'
 import { GnuBgHints, MoveStep } from '@nodots/gnubg-hints'
 import type { HintConfig } from '@nodots/gnubg-hints'
-import fs from 'fs'
-import path from 'path'
 import { logger as coreLogger } from '@nodots/backgammon-core'
 
 // Lazy imports to break circular dependency (ESM-compatible)
@@ -133,6 +131,103 @@ const getCheckercontainersForGnuStep = (
     destination
   )
   return { origin, destination, direction }
+}
+
+export interface PositionMatchResult {
+  matched: boolean
+  originId: string | null
+  desiredDestinationId: string | null
+  matchStrategy: 'id' | 'position' | 'none'
+  expectedDie?: number
+  matchedDie?: number
+}
+
+/**
+ * Match a GNU hint step to a CORE ready move by container positions.
+ *
+ * Validates origin and destination positions in the active player's own
+ * numbering, plus the die consistency the step implies:
+ * - point-to-point: expected die = from - to; the move's die must equal it
+ * - reenter: expected die = 25 - to; the move's die must equal it
+ * - bear-off: expected die = from; the move's die must be >= it (overshoot
+ *   bear-offs are legal when the origin is the highest occupied point, and
+ *   CORE only offers legal possibleMoves)
+ *
+ * Ready moves are scanned in the order given. Callers sort larger die first
+ * so an ambiguous bear-off (both dice can take the same checker off)
+ * resolves to the larger die, which core's must-use-larger-die rule
+ * requires when only one die can be played.
+ */
+export const matchStepToReadyMove = (
+  step: MoveStep,
+  readyMoves: any[],
+  direction: BackgammonMoveDirection,
+  mappedOriginId: string | null
+): PositionMatchResult => {
+  const from = step.from
+  const to = step.to
+  const kind = step.moveKind
+  const found = (
+    origin: any,
+    destination: any,
+    expectedDie: number,
+    matchedDie: number | undefined
+  ): PositionMatchResult => ({
+    matched: true,
+    originId: origin.id,
+    desiredDestinationId: destination?.id ?? null,
+    matchStrategy: origin.id === mappedOriginId ? 'id' : 'position',
+    expectedDie,
+    matchedDie,
+  })
+  for (const m of readyMoves || []) {
+    if (!Array.isArray(m?.possibleMoves)) continue
+    for (const pm of m.possibleMoves) {
+      const org = pm?.origin
+      const dst = pm?.destination
+      if (!org || !dst) continue
+      const moveDie = pm?.dieValue ?? m?.dieValue
+      const opos = org?.position?.[direction]
+      const dpos = dst?.position?.[direction]
+      if (kind === 'reenter' && org.kind === 'bar') {
+        if (typeof to !== 'number' || typeof dpos !== 'number' || dpos !== to)
+          continue
+        const expectedDie = 25 - to
+        if (typeof moveDie === 'number' && moveDie !== expectedDie) continue
+        return found(org, dst, expectedDie, moveDie)
+      }
+      if (kind === 'bear-off' && dst.kind === 'off') {
+        if (
+          typeof from !== 'number' ||
+          typeof opos !== 'number' ||
+          opos !== from
+        )
+          continue
+        if (typeof moveDie === 'number' && moveDie < from) continue
+        return found(org, dst, from, moveDie)
+      }
+      if (kind === 'point-to-point' && org.kind !== 'bar' && dst.kind !== 'off') {
+        if (
+          typeof from !== 'number' ||
+          typeof to !== 'number' ||
+          typeof opos !== 'number' ||
+          typeof dpos !== 'number' ||
+          opos !== from ||
+          dpos !== to
+        )
+          continue
+        const expectedDie = from - to
+        if (typeof moveDie === 'number' && moveDie !== expectedDie) continue
+        return found(org, dst, expectedDie, moveDie)
+      }
+    }
+  }
+  return {
+    matched: false,
+    originId: null,
+    desiredDestinationId: null,
+    matchStrategy: 'none',
+  }
 }
 
 /**
@@ -279,15 +374,6 @@ export const executeRobotTurnWithGNU = async (
     const ready = moves
       .filter((m) => m.stateKind === 'ready')
       .sort((a, b) => (b.dieValue ?? 0) - (a.dieValue ?? 0))
-    // Debug: log start of iteration
-    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({
-      startOfIteration: true,
-      guardValue: guard,
-      stateKind: workingGame.stateKind,
-      totalMoves: moves.length,
-      readyMoves: ready.length,
-      planIdx
-    }) + '\n')
 
     // Refresh possibleMoves for each ready move from the CURRENT board.
     // Stored possibleMoves can be stale after prior moves in the same
@@ -303,7 +389,6 @@ export const executeRobotTurnWithGNU = async (
 
     // If no READY moves remain, let core decide turn completion
     if (ready.length === 0) {
-      fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({ noReadyMoves: true, breakingLoop: true }) + '\n')
       workingGame = CoreUtil.Game.checkAndCompleteTurn(workingGame)
       break
     }
@@ -370,30 +455,6 @@ export const executeRobotTurnWithGNU = async (
       readyMoves: ready.length,
       plannedKind,
     })
-    // Debug: write ready moves info to file
-    const readyDebug = {
-      timestamp: new Date().toISOString(),
-      readyCount: ready.length,
-      barMovesCount: barMoves.length,
-      barByDir,
-      barBothDirs,
-      activeDir,
-      activeColor,
-      plannedKind,
-      plannedTo,
-      readyMoves: ready.map((m: any) => ({
-        id: m.id,
-        dieValue: m.dieValue,
-        moveKind: m.moveKind,
-        stateKind: m.stateKind,
-        possibleMovesCount: m.possibleMoves?.length || 0,
-        firstPossibleMove: m.possibleMoves?.[0] ? {
-          originKind: m.possibleMoves[0]?.origin?.kind,
-          originId: m.possibleMoves[0]?.origin?.id,
-        } : null
-      }))
-    }
-    fs.writeFileSync('/tmp/ready-debug.json', JSON.stringify(readyDebug, null, 2))
     // ALWAYS use position-based matching that validates both origin AND destination.
     // Simple origin ID matching is not sufficient because the same origin can have
     // multiple destinations with different dice (e.g., from position 6: 6→5 with die 1, 6→2 with die 4).
@@ -465,112 +526,23 @@ export const executeRobotTurnWithGNU = async (
         mappedOriginId = barMatchedId
         logger.info('[BAR-DEBUG] Setting originIdToUse=', originIdToUse)
       }
-      // Write debug info to file for analysis
-      const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
-      const debugInfo = {
-        timestamp: new Date().toISOString(),
-        barMovesCount: barMoves.length,
-        plannedKind,
-        plannedTo,
-        typeofPlannedTo: typeof plannedTo,
-        direction: dir,
-        barMatchedId,
-        desiredDestinationId,
-        expectedDieValue,
-        originIdToUse,
-        possibleMoves: barMoves.flatMap((m: any) =>
-          (m.possibleMoves || []).map((pm: any) => ({
-            originKind: pm?.origin?.kind,
-            dpos: pm?.destination?.position?.[dir],
-            dieValue: pm?.dieValue
-          }))
-        )
-      }
-      fs.writeFileSync('/tmp/bar-debug.json', JSON.stringify(debugInfo, null, 2))
-      logger.info('[BAR-DEBUG] Wrote debug info to /tmp/bar-debug.json')
     } else {
       {
       // Attempt position-based mapping (origin+destination+kind match)
-      let posMatchedId: string | null = null
       const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
-      for (const m of ready) {
-        if (!Array.isArray(m.possibleMoves)) continue
-        for (const pm of m.possibleMoves) {
-          const org = pm?.origin
-          const dst = pm?.destination
-          if (!org || !dst) continue
-          // Planned reentry: origin must be bar; check destination position
-          if (plannedKind === 'reenter' && org.kind === 'bar') {
-            const dpos = (dst as any)?.position?.[dir]
-            if (typeof plannedTo === 'number' && typeof dpos === 'number' && dpos === plannedTo) {
-              posMatchedId = org.id
-              desiredDestinationId = dst.id
-              expectedDieValue =
-                (pm as any)?.dieValue ?? (m as any)?.dieValue
-              break
-            }
-          }
-          // Planned bear-off: destination must be off; check origin position
-          if (plannedKind === 'bear-off' && (dst as any)?.kind === 'off') {
-            const opos = (org as any)?.position?.[dir]
-            if (typeof plannedFrom === 'number' && typeof opos === 'number' && opos === plannedFrom) {
-              posMatchedId = org.id
-              desiredDestinationId = dst.id
-              expectedDieValue =
-                (pm as any)?.dieValue ?? (m as any)?.dieValue
-              break
-            }
-          }
-          // Planned point-to-point: check both origin and destination positions
-          if (plannedKind === 'point-to-point') {
-            const opos = (org as any)?.position?.[dir]
-            const dpos = (dst as any)?.position?.[dir]
-            if (
-              typeof plannedFrom === 'number' &&
-              typeof plannedTo === 'number' &&
-              typeof opos === 'number' &&
-              typeof dpos === 'number' &&
-              opos === plannedFrom &&
-              dpos === plannedTo
-            ) {
-              posMatchedId = org.id
-              desiredDestinationId = dst.id
-              expectedDieValue =
-                (pm as any)?.dieValue ?? (m as any)?.dieValue
-              break
-            }
-          }
-        }
-        if (posMatchedId) break
-      }
-      if (posMatchedId) {
-        originIdToUse = posMatchedId
-        mappedOriginId = posMatchedId
+      const matchResult = stepFromPlan
+        ? matchStepToReadyMove(stepFromPlan, ready, dir, mappedOriginId)
+        : null
+      if (matchResult?.matched && matchResult.originId) {
+        originIdToUse = matchResult.originId
+        mappedOriginId = matchResult.originId
+        desiredDestinationId = matchResult.desiredDestinationId
+        // cast: die values in CORE possibleMoves are 1-6
+        expectedDieValue = matchResult.matchedDie as BackgammonDieValue
+        expectedDie = matchResult.expectedDie
+        matchedDie = matchResult.matchedDie
       } else {
-        // GNU planned step could not be matched - dump to file and fail
-        const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
-        const mismatchDebug = {
-          timestamp: new Date().toISOString(),
-          planIdx,
-          planLength,
-          plannedFrom,
-          plannedTo,
-          plannedKind,
-          direction: dir,
-          readyMovesCount: ready.length,
-          readyMoves: ready.map((m: any) => ({
-            dieValue: m.dieValue,
-            moveKind: m.moveKind,
-            stateKind: m.stateKind,
-            possibleMoves: (m.possibleMoves || []).map((pm: any) => ({
-              originPos: pm?.origin?.position?.[dir],
-              destPos: pm?.destination?.position?.[dir],
-              originKind: pm?.origin?.kind,
-              destKind: pm?.destination?.kind,
-            }))
-          }))
-        }
-        fs.writeFileSync('/tmp/step2-mismatch.json', JSON.stringify(mismatchDebug, null, 2))
+        // GNU planned step could not be matched - log diagnostics and fail
         const color = (workingGame.activePlayer as any)?.color || 'unknown'
         const currentRoll = (workingGame.activePlayer as any)?.dice?.currentRoll
         logger.error('MISMATCH DIAGNOSTIC:')
@@ -664,25 +636,11 @@ export const executeRobotTurnWithGNU = async (
           }
         : undefined
     logger.info('[BAR-DEBUG] About to execute: originIdToUse=', originIdToUse, 'moveOptions=', JSON.stringify(moveOptions))
-    const preBarCount = ((workingGame.board as any)?.bar?.[(workingGame.activePlayer as any)?.direction]?.checkers || []).length
-    const execDebug = {
-      timestamp: new Date().toISOString(),
-      planIdx,
-      originIdToUse,
-      moveOptions,
-      preBarCount,
-      plannedFrom,
-      plannedTo,
-      plannedKind,
-    }
-    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify(execDebug) + '\n')
     workingGame = CoreUtil.Game.executeAndRecalculate(
       workingGame,
       originIdToUse,
       moveOptions
     )
-    const postBarCount = ((workingGame.board as any)?.bar?.[(workingGame.activePlayer as any)?.direction]?.checkers || []).length
-    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({ postExec: true, postBarCount, stateKind: workingGame.stateKind, workingGameId: (workingGame as any).id }) + '\n')
 
     const postExecState = workingGame.stateKind
     const postExecMoveCount = ((workingGame.activePlay?.moves || []) as any[]).filter((m: any) => m.stateKind === 'ready').length
@@ -746,27 +704,11 @@ export const executeRobotTurnWithGNU = async (
     })
 
     // Advance to next step in plan after successful execution
-    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({ beforePlanIdxIncrement: true, stepFromPlan: !!stepFromPlan, planIdx }) + '\n')
     if (stepFromPlan) {
       planIdx++
-      fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({ afterPlanIdxIncrement: true, planIdx }) + '\n')
     }
     if (workingGame.stateKind === 'completed') break
-    // Debug: log end-of-iteration state
-    fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({
-      endOfIteration: true,
-      guardRemaining: guard,
-      stateKind: workingGame.stateKind,
-      willContinue: guard > 0 && workingGame.stateKind === 'moving'
-    }) + '\n')
   }
-
-  // Debug: log function exit
-  fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({
-    functionExit: true,
-    finalStateKind: workingGame.stateKind,
-    totalTelemetrySteps: telemetry.length
-  }) + '\n')
 
   // CRITICAL FIX: Transition from 'moved' to 'rolling' state
   // checkAndCompleteTurn only transitions to 'moved', we need handleRobotMovedState
