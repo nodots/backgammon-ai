@@ -271,7 +271,14 @@ export const executeRobotTurnWithGNU = async (
 
   while (guard-- > 0 && workingGame.stateKind === 'moving') {
     const moves = (workingGame.activePlay?.moves || []) as any[]
-    const ready = moves.filter((m) => m.stateKind === 'ready')
+    // Larger die first: a GNU bear-off step matches on origin position only,
+    // so when both dice can bear off the same point the first match wins.
+    // Core's must-use-larger-die rule requires the larger die when only one
+    // die can be played (production game 2d98cf14 froze on this). Point-to-
+    // point and reenter matching is die-unique, so order has no effect there.
+    const ready = moves
+      .filter((m) => m.stateKind === 'ready')
+      .sort((a, b) => (b.dieValue ?? 0) - (a.dieValue ?? 0))
     // Debug: log start of iteration
     fs.appendFileSync('/tmp/exec-debug.json', JSON.stringify({
       startOfIteration: true,
