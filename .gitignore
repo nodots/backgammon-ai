@@ -87,3 +87,9 @@ gnubg/po/stamp-po
 gnubg/doc/Makefile 
 
 .claude/
+
+# auto-shop cell scaffolding (not part of package source)
+.auto-shop/
+SCOPE.json
+HANDOFF.md
+BLOCKER.md
