@@ -117,5 +117,15 @@ export { GNUAIProvider } from './GNUAIProvider.js';
 export { NodotsAIProvider } from './NodotsAIProvider.js';
 export { executeRobotTurnWithGNU } from './robotExecution.js';
 
+// Engine boundary: AnalysisProvider contract + in-process GNU implementation.
+// The GNU robot move path routes hint retrieval through inProcessGnuProvider.
+export {
+  InProcessGnuProvider,
+  inProcessGnuProvider,
+} from './providers/InProcessGnuProvider.js';
+// Type-only re-export: the engine-protocol package is import-only (no CJS
+// resolution), so keep the package entry free of a runtime edge into it.
+export type * from './engine/contract.js';
+
 // Export luck analysis
 export * from './luckCalculator.js';
