@@ -591,42 +591,16 @@ export const executeRobotTurnWithGNU = async (
     const preExecState = workingGame.stateKind
     const preExecMoveCount = ((workingGame.activePlay?.moves || []) as any[]).filter((m: any) => m.stateKind === 'ready').length
 
-    // Extract the actual CORE positions for the move we're about to execute.
-    // These are the authoritative source for history recording (not the GNU plan).
+    // The move slots completed before this execution. The slot that
+    // completes during executeAndRecalculate is the executed move.
     const dir = (workingGame.activePlayer as any)?.direction || 'clockwise'
-    let execOriginPos: number | 'bar' | undefined
-    let execDestPos: number | 'off' | undefined
-    let execDie: number | undefined
-    let execMoveKind: string | undefined
-    let execIsHit = false
-    for (const m of ready) {
-      if (!Array.isArray((m as any).possibleMoves)) continue
-      for (const pm of (m as any).possibleMoves) {
-        if ((pm as any)?.origin?.id === originIdToUse) {
-          const org = (pm as any)?.origin
-          const dst = (pm as any)?.destination
-          if (org?.kind === 'bar') {
-            execOriginPos = 'bar'
-            execMoveKind = 'reenter'
-          } else {
-            execOriginPos = org?.position?.[dir]
-            execMoveKind = 'point-to-point'
-          }
-          if (dst?.kind === 'off') {
-            execDestPos = 'off'
-            execMoveKind = 'bear-off'
-          } else {
-            execDestPos = dst?.position?.[dir]
-          }
-          execDie = (m as any).dieValue
-          execIsHit = (m as any).isHit || false
-          break
-        }
-      }
-      if (execOriginPos !== undefined) break
-    }
+    const preCompletedMoveIds = new Set(
+      ((workingGame.activePlay?.moves || []) as any[])
+        .filter((m: any) => m?.stateKind === 'completed')
+        .map((m: any) => m.id)
+    )
     logger.info('[AI] EXECUTING: planIdx=' + planIdx + ', GNU planned=' + plannedFrom + '→' + plannedTo +
-      ', CORE executing=' + execOriginPos + '→' + execDestPos + ' (die=' + execDie + ')')
+      ', originId=' + originIdToUse)
 
     const moveOptions =
       desiredDestinationId || typeof expectedDieValue === 'number'
@@ -645,6 +619,49 @@ export const executeRobotTurnWithGNU = async (
     const postExecState = workingGame.stateKind
     const postExecMoveCount = ((workingGame.activePlay?.moves || []) as any[]).filter((m: any) => m.stateKind === 'ready').length
     logger.info('[AI] Move executed: preState=' + preExecState + ', postState=' + postExecState + ', readyMoves: ' + preExecMoveCount + ' -> ' + postExecMoveCount)
+
+    // Extract executed positions from the move slot that completed during
+    // this execution — the only authoritative record of what CORE played.
+    // The previous approach guessed pre-execution by scanning possibleMoves
+    // for the origin id, which picked the WRONG slot whenever both dice had
+    // a possible move from the same origin: history then recorded a
+    // fabricated destination (origin minus the other die). See prod game
+    // a1f17d7e (three corrupted robot turns, PR 37.9 for a GNU bot).
+    let execOriginPos: number | 'bar' | undefined
+    let execDestPos: number | 'off' | undefined
+    let execDie: number | undefined
+    let execMoveKind: string | undefined
+    let execIsHit = false
+    const executedMove = ((workingGame.activePlay?.moves || []) as any[]).find(
+      (m: any) => m?.stateKind === 'completed' && !preCompletedMoveIds.has(m.id)
+    )
+    if (executedMove) {
+      const org = executedMove.origin
+      const dst = executedMove.destination
+      if (org?.kind === 'bar') {
+        execOriginPos = 'bar'
+        execMoveKind = 'reenter'
+      } else {
+        execOriginPos = org?.position?.[dir]
+        execMoveKind = 'point-to-point'
+      }
+      if (dst?.kind === 'off') {
+        execDestPos = 'off'
+        execMoveKind = 'bear-off'
+      } else {
+        execDestPos = dst?.position?.[dir]
+      }
+      execDie = executedMove.dieValue
+      execIsHit = executedMove.isHit || false
+      logger.info('[AI] Executed (from completed slot): ' + execOriginPos + '→' + execDestPos +
+        ' (die=' + execDie + ', kind=' + execMoveKind + ')')
+    } else {
+      // No newly-completed slot visible (e.g. activePlay was replaced by a
+      // turn transition). Leave executed* undefined — recording must not
+      // fabricate from the plan.
+      logger.warn('[AI] Could not identify executed move slot post-execution; ' +
+        'telemetry step will carry no executed positions (postState=' + postExecState + ')')
+    }
     // Build CORE legality snapshot for telemetry
     const dirSnap2 = (workingGame.activePlayer as any)?.direction || 'clockwise'
     const barCnt2 = ((workingGame.board as any)?.bar?.[dirSnap2]?.checkers || []).length
