@@ -56,6 +56,7 @@
   },
   "dependencies": {
     "@nodots/backgammon-api-utils": "^1.0.0",
+    "@nodots/backgammon-engine-protocol": "github:nodots/backgammon-engine-protocol#development",
     "@nodots/backgammon-core": "^1.0.0",
     "@nodots/backgammon-types": "^1.0.0",
     "@nodots/gnubg-hints": "^1.0.0",
