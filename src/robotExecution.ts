@@ -21,6 +21,8 @@ import type { SkillConfig } from '@nodots/backgammon-api-utils'
 import { GnuBgHints, MoveStep } from '@nodots/gnubg-hints'
 import type { HintConfig } from '@nodots/gnubg-hints'
 import { logger as coreLogger } from '@nodots/backgammon-core'
+import type { HintRequest } from './engine/contract.js'
+import { inProcessGnuProvider } from './providers/InProcessGnuProvider.js'
 
 // Lazy imports to break circular dependency (ESM-compatible)
 let Core: any = null
@@ -315,13 +317,23 @@ export const executeRobotTurnWithGNU = async (
     const activePlayerColor =
       ((currentGame.activePlayer as any)?.color as BackgammonColor) ?? 'white'
     // Request multiple hints so the tiebreaker below has alternatives.
-    const hints = await GnuBgHints.getHintsFromPositionId(
-      planPositionId,
-      currentRoll,
-      5,
+    // Routed through the AnalysisProvider boundary (InProcessGnuProvider),
+    // which delegates to GnuBgHints.getHintsFromPositionId with the same
+    // arguments. cube/match fields are inert on the positionId hint path.
+    const hintRequest: HintRequest = {
+      positionId: planPositionId,
+      dice: currentRoll,
+      activePlayerColor,
       activePlayerDirection,
-      activePlayerColor
-    )
+      cubeValue: 1,
+      cubeOwner: null,
+      matchScore: [0, 0],
+      matchLength: 0,
+      crawford: false,
+      jacoby: false,
+      beavers: false,
+    }
+    const hints = await inProcessGnuProvider.getMoveHints(hintRequest, 5)
     if (!hints || hints.length === 0) {
       return []
     }
