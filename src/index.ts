@@ -21,10 +21,12 @@ export async function registerAIProvider(): Promise<void> {
   const { GNUAIProvider } = await import('./GNUAIProvider.js');
   const { NodotsAIProvider } = await import('./NodotsAIProvider.js');
   const { TeaLeavesAIProvider } = await import('./TeaLeavesAIProvider.js');
+  const { NeuralAIProvider } = await import('./providers/NeuralAIProvider.js');
 
   const gnuProvider = new GNUAIProvider();
   const nodotsProvider = new NodotsAIProvider();
   const teaLeavesProvider = new TeaLeavesAIProvider();
+  const neuralProvider = new NeuralAIProvider();
 
   // GNU robots: matched by email prefix from seed-robots.ts
   RobotAIRegistry.register('gnu-*', gnuProvider);
@@ -33,6 +35,8 @@ export async function registerAIProvider(): Promise<void> {
   RobotAIRegistry.register('nbg-*', nodotsProvider);
   // Tea Leaves: calibration-floor provider that picks by hashing position id
   RobotAIRegistry.register('tea-*', teaLeavesProvider);
+  // Nodots neural engine, reached over the /v1 HTTP protocol via HttpEngineProvider
+  RobotAIRegistry.register('nn-*', neuralProvider);
   // Fallback for any unrecognized robot
   RobotAIRegistry.register('*', nodotsProvider);
 
@@ -115,6 +119,7 @@ export * from './hintContext.js';
 // Export AI provider implementations
 export { GNUAIProvider } from './GNUAIProvider.js';
 export { NodotsAIProvider } from './NodotsAIProvider.js';
+export { NeuralAIProvider } from './providers/NeuralAIProvider.js';
 export { executeRobotTurnWithGNU } from './robotExecution.js';
 
 // Engine boundary: AnalysisProvider contract + in-process GNU implementation.
